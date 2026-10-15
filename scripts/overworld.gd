@@ -8,6 +8,7 @@ const T := 16
 const WALK_TIME := 0.22
 const RUN_TIME := 0.12
 const ENCOUNTER_CHANCE := 0.11
+const SQRT2 := 1.4142135
 const DIRS := {"up": Vector2i.UP, "down": Vector2i.DOWN, "left": Vector2i.LEFT, "right": Vector2i.RIGHT}
 
 var map := IslandMap.new()
@@ -15,6 +16,8 @@ var player_tile := IslandMap.SPAWN
 var facing := Vector2i.DOWN
 var moving := false
 var busy := false  # diálogo/menu aberto ou batalha
+var encounters_enabled := true  # desligado nos testes automáticos
+var _from_tile := IslandMap.SPAWN
 var _move_from := Vector2.ZERO
 var _move_to := Vector2.ZERO
 var _move_t := 0.0
@@ -170,8 +173,7 @@ func _draw_ground() -> void:
 
 ## Desenha a parte de baixo da grama alta por cima do jogador (efeito "pés na grama").
 func _draw_overlay() -> void:
-	for d in [Vector2i.ZERO, facing]:
-		var p: Vector2i = player_tile + d
+	for p: Vector2i in [player_tile, _from_tile if moving else player_tile + facing]:
 		var t := map.get_tile(p)
 		if t in ["G", "M", "B"]:
 			var tex := _tile_texture(t, p)
@@ -187,51 +189,107 @@ func _process(delta: float) -> void:
 
 	if moving:
 		_move_t += delta / _move_dur
-		if _move_t >= 1.0:
-			_move_t = 1.0
-		player.position = _move_from.lerp(_move_to, _move_t)
-		var frame := 0
-		if _move_t > 0.1 and _move_t < 0.85:
-			frame = 1 if _step_parity else 2
-		_update_player_sprite(frame)
-		if _move_t >= 1.0:
-			moving = false
-			player.position = _move_to
-			_update_player_sprite(0)
-			_on_step_finished()
+		if _move_t < 1.0:
+			player.position = _move_from.lerp(_move_to, _move_t)
+			var frame := 0
+			if _move_t > 0.1 and _move_t < 0.85:
+				frame = 1 if _step_parity else 2
+			_update_player_sprite(frame)
+			overlay.queue_redraw()
+			return
+		# Passo concluído. O tempo que sobrou já conta para o próximo passo,
+		# então segurar as teclas dá um movimento contínuo, sem trancos.
+		var leftover := (_move_t - 1.0) * _move_dur
+		moving = false
+		player.position = _move_to
+		_update_player_sprite(0)
+		_on_step_finished()
 		overlay.queue_redraw()
+		if busy or not _try_move(_input_dir()) or not moving:
+			return
+		_move_t = minf(leftover / _move_dur, 0.99)
+		player.position = _move_from.lerp(_move_to, _move_t)
 		return
 
 	if busy:
 		return
-	var want := Vector2i.ZERO
-	for k in ["up", "down", "left", "right"]:
-		if Input.is_action_pressed(k):
-			want = DIRS[k]
+	_try_move(_input_dir())
+
+
+## Direção pedida pelo teclado (WASD ou setas), já com as diagonais.
+## Teclas opostas (W+S, A+D) se anulam naquele eixo.
+func _input_dir() -> Vector2i:
+	return Vector2i(
+		int(Input.is_action_pressed("right")) - int(Input.is_action_pressed("left")),
+		int(Input.is_action_pressed("down")) - int(Input.is_action_pressed("up")))
+
+
+## Tenta andar um tile na direção d (pode ser diagonal). Retorna false se não havia direção.
+func _try_move(d: Vector2i) -> bool:
+	if d == Vector2i.ZERO:
+		return false
+	if d.x == 0 or d.y == 0:
+		_step_cardinal(d)
+		return true
+	# na diagonal o personagem olha para o lado (como nos clássicos)
+	facing = Vector2i(d.x, 0)
+	_update_player_sprite()
+	var h := Vector2i(d.x, 0)
+	var v := Vector2i(0, d.y)
+	# só corta o canto se os dois lados estiverem livres (não atravessa quinas)
+	if _can_enter(player_tile + d) and _can_pass(player_tile + h) and _can_pass(player_tile + v):
+		_start_step(d)
+		return true
+	# diagonal bloqueada: desliza pelo eixo que estiver livre
+	for a: Vector2i in [h, v]:
+		if _can_enter(player_tile + a) or player_tile + a == IslandMap.DOOR:
+			_step_cardinal(a)
+			return true
+	for a: Vector2i in [d, h, v]:
+		if _blocked_by_grass(player_tile + a):
+			_block_tall_grass()
 			break
-	if want != Vector2i.ZERO:
-		_try_move(want)
+	return true
 
 
-func _try_move(d: Vector2i) -> void:
+func _step_cardinal(d: Vector2i) -> void:
 	facing = d
 	_update_player_sprite()
 	var target := player_tile + d
 	if target == IslandMap.DOOR:
 		_enter_house()
-		return
-	if not map.is_walkable(target) or _npc_at(target) != "":
-		return
-	if map.zone_at(target) != "" and Game.party.is_empty():
+	elif _blocked_by_grass(target):
 		_block_tall_grass()
-		return
+	elif _can_enter(target):
+		_start_step(d)
+
+
+## Grama alta antes de ter o primeiro animal.
+func _blocked_by_grass(p: Vector2i) -> bool:
+	return map.is_walkable(p) and map.zone_at(p) != "" and Game.party.is_empty()
+
+
+## Tile onde o jogador pode parar.
+func _can_enter(p: Vector2i) -> bool:
+	return map.is_walkable(p) and _npc_at(p) == "" and not _blocked_by_grass(p)
+
+
+## Tile ao lado que precisa estar livre para cortar a quina numa diagonal.
+func _can_pass(p: Vector2i) -> bool:
+	return map.is_walkable(p) and _npc_at(p) == ""
+
+
+func _start_step(d: Vector2i) -> void:
 	moving = true
 	_step_parity = not _step_parity
-	_move_from = player.position
-	_move_to = _tile_to_px(target)
+	_from_tile = player_tile
+	_move_from = _tile_to_px(player_tile)
+	_move_to = _tile_to_px(player_tile + d)
 	_move_t = 0.0
-	_move_dur = RUN_TIME if Input.is_action_pressed("run") else WALK_TIME
-	player_tile = target
+	# a diagonal percorre √2 vezes a distância, então dura √2 vezes mais (mesma velocidade)
+	var diagonal := d.x != 0 and d.y != 0
+	_move_dur = (RUN_TIME if Input.is_action_pressed("run") else WALK_TIME) * (SQRT2 if diagonal else 1.0)
+	player_tile += d
 
 
 func _npc_at(p: Vector2i) -> String:
@@ -245,7 +303,7 @@ func _on_step_finished() -> void:
 	Game.player_pos = player_tile
 	Game.player_dir = facing
 	var zone := map.zone_at(player_tile)
-	if zone != "" and Game.has_able() and randf() < ENCOUNTER_CHANCE:
+	if zone != "" and encounters_enabled and Game.has_able() and randf() < ENCOUNTER_CHANCE:
 		_start_encounter(zone)
 
 
