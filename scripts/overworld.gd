@@ -35,36 +35,53 @@ var start_menu: ChoiceMenu
 var party_screen: PartyScreen
 var bag_screen: BagScreen
 var dex_screen: DexScreen
-var ground: Node2D
-var overlay: Node2D
+var ground: Sprite2D        # chão da ilha inteira (uma textura só)
+var water_fx: Node2D        # brilhos animados na água
+var shadows: Sprite2D       # sombras dos objetos fixos
+var tall_layer: Sprite2D    # tufos da grama alta
+var objects: Node2D         # árvores, casa, pedras, pessoas: ordenados pela altura (y-sort)
+var fx_layer: Node2D        # borboletas
+var player_shadow: Sprite2D
+var _grass_fronts: Array[Sprite2D] = []  # frente da grama alta, cobre os pés de quem está nela
+var _water_tiles: Array[Vector2i] = []
+var _static_objects := []   # [tipo, base] para as sombras
+var _sway := 0
+var _butterflies := []
+var _blink := {}            # quem está piscando agora
 
 
 func _ready() -> void:
-	ground = Node2D.new()
-	ground.draw.connect(_draw_ground)
+	ground = Sprite2D.new()
+	ground.centered = false
 	add_child(ground)
+	water_fx = Node2D.new()
+	water_fx.draw.connect(_draw_water_fx)
+	add_child(water_fx)
+	shadows = Sprite2D.new()
+	shadows.centered = false
+	add_child(shadows)
+	tall_layer = Sprite2D.new()
+	tall_layer.centered = false
+	add_child(tall_layer)
+	objects = Node2D.new()
+	objects.y_sort_enabled = true
+	add_child(objects)
+	fx_layer = Node2D.new()
+	fx_layer.draw.connect(_draw_fx)
+	add_child(fx_layer)
 
-	var house := Sprite2D.new()
-	house.texture = Art.house()
-	house.centered = false
-	house.position = Vector2(IslandMap.HOUSE.position * T) + Vector2(0, 0)
-	add_child(house)
+	_build_world()
 
 	for n in map.npcs:
-		var s := Sprite2D.new()
-		s.centered = false
+		var s := _actor_sprite()
 		s.texture = Art.person(n, "down", 0)
 		s.position = _tile_to_px(map.npcs[n])
-		add_child(s)
+		objects.add_child(s)
 		npc_sprites[n] = s
 
-	player = Sprite2D.new()
-	player.centered = false
-	add_child(player)
-
-	overlay = Node2D.new()
-	overlay.draw.connect(_draw_overlay)
-	add_child(overlay)
+	player = _actor_sprite()
+	objects.add_child(player)
+	player_shadow = player.get_child(0)
 
 	camera = Camera2D.new()
 	camera.zoom = Vector2(2, 2)
@@ -73,7 +90,7 @@ func _ready() -> void:
 	camera.limit_right = IslandMap.W * T
 	camera.limit_bottom = IslandMap.H * T
 	player.add_child(camera)
-	camera.position = Vector2(9, 8)
+	camera.position = Vector2(0, -8)
 
 	ui = CanvasLayer.new()
 	ui.layer = 5
@@ -81,7 +98,7 @@ func _ready() -> void:
 	msg = MessageBox.new()
 	msg.hide()
 	ui.add_child(msg)
-	start_menu = ChoiceMenu.new(Rect2(318, 6, 156, 194))
+	start_menu = ChoiceMenu.new(Rect2(318, 6, 156, 230))
 	start_menu.row_height = 36
 	start_menu.hide()
 	ui.add_child(start_menu)
@@ -101,9 +118,14 @@ func _ready() -> void:
 	player.position = _tile_to_px(player_tile)
 	_update_player_sprite()
 
+	_spawn_butterflies()
+	apply_graphics()
+	Settings.changed.connect(apply_graphics)
 
+
+## Posição dos pés de quem está no tile p (meio da borda de baixo do tile).
 func _tile_to_px(p: Vector2i) -> Vector2:
-	return Vector2(p * T) + Vector2(-1, -3)
+	return Vector2(p * T) + Vector2(T / 2, T)
 
 
 func _dir_name(d: Vector2i) -> String:
@@ -115,77 +137,198 @@ func _dir_name(d: Vector2i) -> String:
 
 func _update_player_sprite(frame := 0) -> void:
 	player.texture = Art.person("player", _dir_name(facing), frame)
+	# nos quadros de passo o corpo sobe 1 px (balanço da caminhada)
+	player.offset.y = -23 if frame in [1, 2] else -22
 
 
-# ---------------------------------------------------------------- desenho
-
-func _tile_texture(t: String, p: Vector2i) -> Texture2D:
-	match t:
-		"~":
-			return Art.tile("water", (_water_frame + (p.x + p.y) % 2) % 2)
-		"s":
-			return Art.tile("sand")
-		".", "H", "D":
-			return Art.tile("grass")
-		",":
-			return Art.tile("grass2")
-		"f":
-			return Art.tile("flowers", _water_frame)
-		"p":
-			return Art.tile("path")
-		"G":
-			return Art.tile("tall")
-		"M":
-			return Art.tile("tall_swamp")
-		"B":
-			return Art.tile("tall_beach")
-		"T":
-			return Art.tile("tree")
-		"r":
-			return Art.tile("rock")
-		"w":
-			return Art.tile("pond", _water_frame)
-		"S":
-			return Art.tile("sign")
-	return Art.tile("grass")
+## Sprite de personagem com a origem nos pés e uma sombra embaixo.
+func _actor_sprite() -> Sprite2D:
+	var s := Sprite2D.new()
+	s.centered = false
+	s.offset = Vector2(-9, -22)
+	var sh := Sprite2D.new()
+	sh.texture = WorldArt.actor_shadow()
+	sh.position = Vector2(0, -1)
+	sh.show_behind_parent = true
+	s.add_child(sh)
+	return s
 
 
-func _draw_ground() -> void:
-	var foam := Color(1, 1, 1, 0.7)
+# ---------------------------------------------------------------- mundo
+
+## Cria os objetos fixos da ilha: árvores, coqueiros, pedras, placa, casa e grama alta.
+func _build_world() -> void:
 	for y in IslandMap.H:
 		for x in IslandMap.W:
 			var p := Vector2i(x, y)
-			var t := map.get_tile(p)
-			var pos := Vector2(x * T, y * T)
-			ground.draw_texture(_tile_texture(t, p), pos)
-			if t == "~" or t == "w":
-				# espuma na borda da água
-				var c := foam if t == "~" else Color(0.7, 0.9, 0.8, 0.5)
-				if map.get_tile(p + Vector2i.UP) not in ["~", "w"]:
-					ground.draw_rect(Rect2(pos, Vector2(T, 2)), c)
-				if map.get_tile(p + Vector2i.DOWN) not in ["~", "w"] and y < IslandMap.H - 1:
-					ground.draw_rect(Rect2(pos + Vector2(0, T - 2), Vector2(T, 2)), c)
-				if map.get_tile(p + Vector2i.LEFT) not in ["~", "w"]:
-					ground.draw_rect(Rect2(pos, Vector2(2, T)), c)
-				if map.get_tile(p + Vector2i.RIGHT) not in ["~", "w"] and x < IslandMap.W - 1:
-					ground.draw_rect(Rect2(pos + Vector2(T - 2, 0), Vector2(2, T)), c)
+			var base := Vector2(x * T + T / 2, (y + 1) * T)
+			var h := WorldArt._hash(x, y, 5)
+			match map.get_tile(p):
+				"T":
+					var near_sand := false
+					for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(-1, 1)]:
+						if map.get_tile(p + d) in ["s", "~", "B"]:
+							near_sand = true
+					if near_sand:
+						_add_object(WorldArt.palm(h % 2), base, Vector2(-14, -36), "palm")
+					else:
+						# leve deslocamento para a floresta não parecer uma grade
+						var jitter := Vector2(h % 3 - 1, 0)
+						_add_object(WorldArt.tree(h % 6), base + jitter, Vector2(-WorldArt.TREE_W / 2, -WorldArt.TREE_H), "tree")
+				"r":
+					_add_object(WorldArt.rock(h % 2), base, Vector2(-9, -15), "rock")
+				"S":
+					_add_object(WorldArt.sign_post(), base, Vector2(-8, -13), "sign")
+				"G", "M", "B":
+					# a fileira de baixo dos tufos deste tile, desenhada na frente de
+					# quem está nele (cobre as pernas, como nos clássicos)
+					var front := Sprite2D.new()
+					front.centered = false
+					front.region_enabled = true
+					front.region_rect = Rect2(x * T, y * T + 6, T, 10)
+					# 1 px abaixo da base: fica na frente de quem está neste tile
+					front.position = Vector2(x * T, (y + 1) * T + 1)
+					front.offset = Vector2(0, -11)
+					objects.add_child(front)
+					_grass_fronts.append(front)
+				"~", "w":
+					_water_tiles.append(p)
+	var hb := Vector2(IslandMap.HOUSE.position.x * T - 2, IslandMap.HOUSE.end.y * T)
+	_add_object(WorldArt.house(), hb, Vector2(0, -WorldArt.HOUSE_H), "house")
 
 
-## Desenha a parte de baixo da grama alta por cima do jogador (efeito "pés na grama").
-func _draw_overlay() -> void:
-	for p: Vector2i in [player_tile, _from_tile if moving else player_tile + facing]:
-		var t := map.get_tile(p)
-		if t in ["G", "M", "B"]:
-			var tex := _tile_texture(t, p)
-			overlay.draw_texture_rect_region(tex, Rect2(p.x * T, p.y * T + 9, T, 7), Rect2(0, 9, T, 7))
+func _add_object(tex: Texture2D, base: Vector2, offset: Vector2, kind: String) -> void:
+	var s := Sprite2D.new()
+	s.centered = false
+	s.texture = tex
+	s.position = base
+	s.offset = offset
+	objects.add_child(s)
+	_static_objects.append([kind, base])
+
+
+## Aplica as configurações de qualidade (detalhes, sombras, animações).
+func apply_graphics() -> void:
+	ground.texture = WorldArt.ground(map, Settings.detail)
+	shadows.texture = WorldArt.shadow_layer(_static_objects)
+	shadows.visible = Settings.shadows
+	player_shadow.visible = Settings.shadows
+	for n in npc_sprites:
+		npc_sprites[n].get_child(0).visible = Settings.shadows
+	water_fx.visible = Settings.animations
+	fx_layer.visible = Settings.animations
+	if Settings.animations:
+		WorldArt.tall_layer(map, 1)  # prepara já o 2º quadro do balanço (evita travadinha)
+	else:
+		_sway = 0
+		_blink.clear()
+		_update_player_sprite()
+		for n in npc_sprites:
+			npc_sprites[n].texture = Art.person(n, npc_sprites[n].get_meta("dir", "down"), 0)
+	_refresh_tall_grass()
+
+
+func _refresh_tall_grass() -> void:
+	var tex := WorldArt.tall_layer(map, _sway)
+	tall_layer.texture = tex
+	for f in _grass_fronts:
+		f.texture = tex
+
+
+## Tiles visíveis pela câmera (com folga de 1 tile).
+func _visible_tiles() -> Rect2i:
+	var center := camera.get_screen_center_position()
+	var half := Vector2(get_viewport_rect().size) / camera.zoom / 2.0
+	var a := Vector2i(((center - half) / T).floor()) - Vector2i.ONE
+	var b := Vector2i(((center + half) / T).ceil()) + Vector2i.ONE
+	return Rect2i(a, b - a)
+
+
+## Reflexos do sol que aparecem e somem na água.
+func _draw_water_fx() -> void:
+	var view := _visible_tiles()
+	var glint := Color(1, 1, 1, 0.85)
+	var soft := Color(0.85, 0.95, 1, 0.6)
+	for p in _water_tiles:
+		if not view.has_point(p):
+			continue
+		var h := WorldArt._hash(p.x, p.y, 9)
+		var phase := fmod(_anim_time * 0.7 + (h % 100) / 100.0, 1.0)
+		if phase > 0.4:
+			continue
+		var pos := Vector2(p.x * T + h % 11, p.y * T + 3 + (h >> 4) % 10)
+		var w := 3.0 if phase < 0.1 or phase > 0.3 else 5.0
+		var c := soft if phase < 0.1 or phase > 0.3 else glint
+		if map.get_tile(p) == "w":
+			c.a *= 0.6
+		water_fx.draw_rect(Rect2(pos + Vector2((5 - w) / 2, 0), Vector2(w, 1)), c)
+
+
+# ---------------------------------------------------------------- borboletas
+
+func _spawn_butterflies() -> void:
+	_butterflies.clear()
+	for i in 5:
+		_butterflies.append({"pos": Vector2.ZERO, "vel": Vector2.ZERO, "col": i % 4, "t": randf() * 10.0, "ok": false})
+
+
+func _update_butterflies(delta: float) -> void:
+	var center := player.position
+	for b in _butterflies:
+		b.t += delta
+		if not b.ok or b.pos.distance_to(center) > 170:
+			# reaparece num ponto de grama ou flores perto do jogador
+			for _try in 12:
+				var p := player_tile + Vector2i(randi_range(-8, 8), randi_range(-6, 6))
+				if map.get_tile(p) in [".", ",", "f"]:
+					b.pos = Vector2(p * T) + Vector2(8, 4)
+					b.ok = true
+					break
+		var wander := Vector2(sin(b.t * 1.3 + b.col), cos(b.t * 0.9 + b.col * 2.0))
+		b.vel = b.vel.lerp(wander * 18.0, delta * 2.0)
+		b.pos += b.vel * delta
+
+
+func _draw_fx() -> void:
+	for b in _butterflies:
+		if not b.ok:
+			continue
+		var frame := int(b.t * 8.0) % 2
+		var bob := sin(b.t * 6.0) * 2.0
+		fx_layer.draw_texture(WorldArt.butterfly(b.col, frame), (b.pos + Vector2(0, bob)).floor())
+
+
+## Animações do cenário: grama balançando, brilhos na água, borboletas e piscar de olhos.
+func _animate(delta: float) -> void:
+	_anim_time += delta
+	if not Settings.animations:
+		return
+	var sway := int(_anim_time / 0.7) % 2
+	if sway != _sway:
+		_sway = sway
+		_refresh_tall_grass()
+	var wf := int(_anim_time / 0.12)
+	if wf != _water_frame:
+		_water_frame = wf
+		water_fx.queue_redraw()
+	_update_butterflies(delta)
+	fx_layer.queue_redraw()
+	# cada pessoa pisca de vez em quando, cada uma no seu ritmo
+	for n in npc_sprites:
+		var blink := fmod(_anim_time + n.length() * 0.9, 4.1) < 0.14
+		if blink != _blink.get(n, false):
+			_blink[n] = blink
+			var s: Sprite2D = npc_sprites[n]
+			s.texture = Art.person(n, s.get_meta("dir", "down"), 3 if blink else 0)
+	if not moving:
+		var blink := fmod(_anim_time, 3.6) < 0.14 and facing != Vector2i.UP
+		if blink != _blink.get("player", false):
+			_blink["player"] = blink
+			_update_player_sprite(3 if blink else 0)
 
 
 func _process(delta: float) -> void:
-	_anim_time += delta
-	var wf := int(_anim_time / 0.6) % 2
-	if wf != _water_frame:
-		_water_frame = wf
-		ground.queue_redraw()
+	_animate(delta)
 
 	if moving:
 		_move_t += delta / _move_dur
@@ -195,7 +338,6 @@ func _process(delta: float) -> void:
 			if _move_t > 0.1 and _move_t < 0.85:
 				frame = 1 if _step_parity else 2
 			_update_player_sprite(frame)
-			overlay.queue_redraw()
 			return
 		# Passo concluído. O tempo que sobrou já conta para o próximo passo,
 		# então segurar as teclas dá um movimento contínuo, sem trancos.
@@ -204,7 +346,6 @@ func _process(delta: float) -> void:
 		player.position = _move_to
 		_update_player_sprite(0)
 		_on_step_finished()
-		overlay.queue_redraw()
 		if busy or not _try_move(_input_dir()) or not moving:
 			return
 		_move_t = minf(leftover / _move_dur, 0.99)
@@ -346,6 +487,7 @@ func _interact() -> void:
 	var t := player_tile + facing
 	var npc := _npc_at(t)
 	if npc != "":
+		npc_sprites[npc].set_meta("dir", _dir_name(-facing))
 		npc_sprites[npc].texture = Art.person(npc, _dir_name(-facing), 0)
 		busy = true
 		match npc:
@@ -581,7 +723,6 @@ func respawn_home() -> void:
 	facing = Vector2i.DOWN
 	player.position = _tile_to_px(player_tile)
 	_update_player_sprite()
-	overlay.queue_redraw()
 	Game.heal_party()
 	Game.player_pos = player_tile
 	busy = true

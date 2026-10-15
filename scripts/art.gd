@@ -308,81 +308,102 @@ static func _make_house() -> Image:
 
 # ---------------------------------------------------------------- personagens
 
+## Personagens com 16x20 px (18x22 com contorno): boné/cabelo, rosto, camisa
+## com mangas, mochila nas costas, calça e sapatos. A base fica nos pés.
 const PERSON_BASE := {
 	"down": [
 		".....rrrrrr.....",
 		"....rrrrrrrr....",
-		"....rrwwrrrr....",
-		"...rrrrrrrrrr...",
-		"....hhhhhhhh....",
-		"....hssssssh....",
-		"....sessssew....",
+		"...rrrwwwwrrr...",
+		"...rrrrwwrrrr...",
+		"..RRRRRRRRRRRR..",
+		"...hhhhhhhhhh...",
+		"...hssssssssh...",
+		"...hsessssesh...",
+		"...ssessssess...",
+		"....sssmmsss....",
 		".....ssssss.....",
-		"....bbbbbbbb....",
-		"...sbbbbbbbbs...",
-		"...sbbbbbbbbs...",
+		"...bbbbccbbbb...",
+		"..abbbbbbbbbba..",
+		"..abbbbbbbbbba..",
+		"..aBbbbbbbbbBa..",
+		"..s.BBBBBBBB.s..",
+		"....pppppppp....",
 	],
 	"up": [
 		".....rrrrrr.....",
 		"....rrrrrrrr....",
-		"....rrrrrrrr....",
 		"...rrrrrrrrrr...",
+		"...rrrrrrrrrr...",
+		"...RrrrrrrrrR...",
+		"...hhhhhhhhhh...",
+		"...hhhhhhhhhh...",
+		"...hhhhhhhhhh...",
+		"..shhhhhhhhhhs..",
 		"....hhhhhhhh....",
-		"....hhhhhhhh....",
-		"....shhhhhhs....",
-		".....hhhhhh.....",
-		"....bbbbbbbb....",
-		"...sbbbbbbbbs...",
-		"...sbbbbbbbbs...",
+		".....ssssss.....",
+		"...bbggggggbb...",
+		"..abggggggggba..",
+		"..abgGGGGGGgba..",
+		"..aBggggggggBa..",
+		"..s.BGGGGGGB.s..",
+		"....pppppppp....",
 	],
 	"left": [
-		".....rrrrrr.....",
-		"....rrrrrrrr....",
-		"....rrrrrrww....",
-		"..rrrrrrrrrr....",
-		"....shhhhhhh....",
-		"....ssshhhhh....",
-		"....esshhhhh....",
-		".....ssssss.....",
-		".....bbbbbb.....",
-		".....bbsbbb.....",
-		".....bbsbbb.....",
+		"......rrrrrr....",
+		".....rrrrrrrr...",
+		"....rwwrrrrrrr..",
+		"....rrrrrrrrrr..",
+		".RRRRRrrrrrrrr..",
+		"....shhhhhhhhh..",
+		"...ssshhhhhhhh..",
+		"...sesshhhhhhh..",
+		"...sesssshhhh...",
+		"...smsssshhh....",
+		".....sssss......",
+		".....bbbbbbgg...",
+		".....bbbbbbggg..",
+		".....bbabbbggg..",
+		".....bbabbbggg..",
+		".....BBsBBBgg...",
+		"......pppppp....",
 	],
 }
 
 const PERSON_LEGS := {
 	"down": [
-		["....pppppppp....", "....ppp..ppp....", "....kkk..kkk...."],
-		["....pppppppp....", "....ppp..kkk....", "....kkk........."],
-		["....pppppppp....", "....kkk..ppp....", ".........kkk...."],
-	],
-	"up": [
-		["....pppppppp....", "....ppp..ppp....", "....kkk..kkk...."],
-		["....pppppppp....", "....ppp..kkk....", "....kkk........."],
-		["....pppppppp....", "....kkk..ppp....", ".........kkk...."],
+		["....ppp..ppp....", "....ppp..ppp....", "....kkk..kkk...."],
+		["....ppp..ppp....", "....kkk..ppp....", ".........kkk...."],
+		["....ppp..ppp....", "....ppp..kkk....", "....kkk........."],
 	],
 	"left": [
-		[".....pppppp.....", "......pppp......", "......kkkk......"],
-		[".....pppppp.....", "....pp....pp....", "...kk......kk..."],
-		[".....pppppp.....", ".....pp..pp.....", ".....kk..kk....."],
+		["......pppp......", "......pppp......", ".....kkkkk......"],
+		[".....pp..pp.....", "....pp....pp....", "...kkk.....kkk.."],
+		["......pppp......", ".....pp.pp......", "....kkk..kk....."],
 	],
 }
 
 const PEOPLE := {
-	"player": {"r": "e03838", "w": "f8f8f8", "h": "4a3020", "s": "f8c898", "e": "202020", "b": "3a70d8", "p": "3a3a58", "k": "2a2a2a"},
-	"professor": {"r": "c8c8c8", "w": "e8e8e8", "h": "c8c8c8", "s": "f0c090", "e": "202020", "b": "f4f4f4", "p": "6a5040", "k": "3a2a20"},
-	"pescador": {"r": "e8c860", "w": "c8a040", "h": "5a3a20", "s": "d8a070", "e": "202020", "b": "3a9a5a", "p": "4a4a7a", "k": "2a2a2a"},
-	"menina": {"r": "f070a0", "w": "f8d0e0", "h": "8a4a20", "s": "f8d0a8", "e": "202020", "b": "f8a0c8", "p": "5a50a0", "k": "a03050"},
+	"player": {"r": "e03838", "R": "a82424", "w": "f8f8f8", "h": "4a3020", "s": "f8c898", "e": "202838", "m": "d88870",
+		"b": "3a70d8", "B": "2a58b0", "a": "3264c4", "c": "f8f8f8", "g": "f0b030", "G": "c08020", "p": "3a3a58", "k": "c83030"},
+	"professor": {"r": "d8d8d8", "R": "c8c8c8", "w": "e4e4e4", "h": "c8c8c8", "s": "f0c090", "e": "202838", "m": "c87860",
+		"b": "f4f4f4", "B": "d0d0d8", "a": "e8e8ee", "c": "6a9ad8", "g": "8a6a4a", "G": "6a4a30", "p": "6a5040", "k": "3a2a20"},
+	"pescador": {"r": "e8c860", "R": "c8a040", "w": "f4dc88", "h": "5a3a20", "s": "d8a070", "e": "202838", "m": "b07050",
+		"b": "3a9a5a", "B": "2a7a44", "a": "348c50", "c": "f8f8f8", "g": "b08850", "G": "8a6a3a", "p": "4a4a7a", "k": "2a2a2a"},
+	"menina": {"r": "f070a0", "R": "c85080", "w": "f8d0e0", "h": "8a4a20", "s": "f8d0a8", "e": "202838", "m": "e07878",
+		"b": "f8a0c8", "B": "e080a8", "a": "f090bc", "c": "ffffff", "g": "a070e0", "G": "8050c0", "p": "5a50a0", "k": "a03050"},
 }
 
 
-## dir: "down", "up", "left", "right". frame: 0 parado, 1 e 2 andando.
+## dir: "down", "up", "left", "right". frame: 0 parado, 1 e 2 andando, 3 piscando.
 static func person(who: String, dir: String, frame: int) -> Texture2D:
 	return _cached("p_%s_%s_%d" % [who, dir, frame], func():
 		var d := "left" if dir == "right" else dir
 		var rows: Array = PERSON_BASE[d].duplicate()
-		rows.append_array(PERSON_LEGS[d][frame])
-		var img := rows_to_image(rows, _pal(PEOPLE[who]), true, false, "ew")
+		if frame == 3:
+			rows = rows.map(func(r): return r.replace("e", "s"))
+		rows.append_array(PERSON_LEGS["left" if d == "left" else "down"][frame % 3])
+		var img := rows_to_image(rows, _pal(PEOPLE[who]), true, false, "ewmc")
 		if dir == "right":
 			img.flip_x()
 		return _tex(img))

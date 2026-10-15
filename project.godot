@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 
 DB="*res://scripts/db.gd"
 Game="*res://scripts/game.gd"
+Settings="*res://scripts/settings.gd"
 
 [display]
 
