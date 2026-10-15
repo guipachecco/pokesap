@@ -1,0 +1,509 @@
+class_name Overworld
+extends Node2D
+## Exploração da ilha: mapa, jogador, NPCs, grama alta, menus e diálogos.
+
+signal battle_requested(enemy: Creature, zone: String)
+
+const T := 16
+const WALK_TIME := 0.22
+const RUN_TIME := 0.12
+const ENCOUNTER_CHANCE := 0.11
+const DIRS := {"up": Vector2i.UP, "down": Vector2i.DOWN, "left": Vector2i.LEFT, "right": Vector2i.RIGHT}
+
+var map := IslandMap.new()
+var player_tile := IslandMap.SPAWN
+var facing := Vector2i.DOWN
+var moving := false
+var busy := false  # diálogo/menu aberto ou batalha
+var _move_from := Vector2.ZERO
+var _move_to := Vector2.ZERO
+var _move_t := 0.0
+var _move_dur := WALK_TIME
+var _step_parity := false
+var _anim_time := 0.0
+var _water_frame := 0
+
+var player: Sprite2D
+var camera: Camera2D
+var npc_sprites := {}
+var ui: CanvasLayer
+var msg: MessageBox
+var start_menu: ChoiceMenu
+var party_screen: PartyScreen
+var bag_screen: BagScreen
+var dex_screen: DexScreen
+var ground: Node2D
+var overlay: Node2D
+
+
+func _ready() -> void:
+	ground = Node2D.new()
+	ground.draw.connect(_draw_ground)
+	add_child(ground)
+
+	var house := Sprite2D.new()
+	house.texture = Art.house()
+	house.centered = false
+	house.position = Vector2(IslandMap.HOUSE.position * T) + Vector2(0, 0)
+	add_child(house)
+
+	for n in map.npcs:
+		var s := Sprite2D.new()
+		s.centered = false
+		s.texture = Art.person(n, "down", 0)
+		s.position = _tile_to_px(map.npcs[n])
+		add_child(s)
+		npc_sprites[n] = s
+
+	player = Sprite2D.new()
+	player.centered = false
+	add_child(player)
+
+	overlay = Node2D.new()
+	overlay.draw.connect(_draw_overlay)
+	add_child(overlay)
+
+	camera = Camera2D.new()
+	camera.zoom = Vector2(2, 2)
+	camera.limit_left = 0
+	camera.limit_top = 0
+	camera.limit_right = IslandMap.W * T
+	camera.limit_bottom = IslandMap.H * T
+	player.add_child(camera)
+	camera.position = Vector2(9, 8)
+
+	ui = CanvasLayer.new()
+	ui.layer = 5
+	add_child(ui)
+	msg = MessageBox.new()
+	msg.hide()
+	ui.add_child(msg)
+	start_menu = ChoiceMenu.new(Rect2(352, 6, 122, 128))
+	start_menu.hide()
+	ui.add_child(start_menu)
+	party_screen = PartyScreen.new()
+	party_screen.hide()
+	ui.add_child(party_screen)
+	bag_screen = BagScreen.new()
+	bag_screen.hide()
+	ui.add_child(bag_screen)
+	dex_screen = DexScreen.new()
+	dex_screen.hide()
+	ui.add_child(dex_screen)
+
+	if Game.player_pos.x >= 0 and map.is_walkable(Game.player_pos):
+		player_tile = Game.player_pos
+		facing = Game.player_dir
+	player.position = _tile_to_px(player_tile)
+	_update_player_sprite()
+
+
+func _tile_to_px(p: Vector2i) -> Vector2:
+	return Vector2(p * T) + Vector2(-1, -3)
+
+
+func _dir_name(d: Vector2i) -> String:
+	for k in DIRS:
+		if DIRS[k] == d:
+			return k
+	return "down"
+
+
+func _update_player_sprite(frame := 0) -> void:
+	player.texture = Art.person("player", _dir_name(facing), frame)
+
+
+# ---------------------------------------------------------------- desenho
+
+func _tile_texture(t: String, p: Vector2i) -> Texture2D:
+	match t:
+		"~":
+			return Art.tile("water", (_water_frame + (p.x + p.y) % 2) % 2)
+		"s":
+			return Art.tile("sand")
+		".", "H", "D":
+			return Art.tile("grass")
+		",":
+			return Art.tile("grass2")
+		"f":
+			return Art.tile("flowers", _water_frame)
+		"p":
+			return Art.tile("path")
+		"G":
+			return Art.tile("tall")
+		"M":
+			return Art.tile("tall_swamp")
+		"B":
+			return Art.tile("tall_beach")
+		"T":
+			return Art.tile("tree")
+		"r":
+			return Art.tile("rock")
+		"w":
+			return Art.tile("pond", _water_frame)
+		"S":
+			return Art.tile("sign")
+	return Art.tile("grass")
+
+
+func _draw_ground() -> void:
+	var foam := Color(1, 1, 1, 0.7)
+	for y in IslandMap.H:
+		for x in IslandMap.W:
+			var p := Vector2i(x, y)
+			var t := map.get_tile(p)
+			var pos := Vector2(x * T, y * T)
+			ground.draw_texture(_tile_texture(t, p), pos)
+			if t == "~" or t == "w":
+				# espuma na borda da água
+				var c := foam if t == "~" else Color(0.7, 0.9, 0.8, 0.5)
+				if map.get_tile(p + Vector2i.UP) not in ["~", "w"]:
+					ground.draw_rect(Rect2(pos, Vector2(T, 2)), c)
+				if map.get_tile(p + Vector2i.DOWN) not in ["~", "w"] and y < IslandMap.H - 1:
+					ground.draw_rect(Rect2(pos + Vector2(0, T - 2), Vector2(T, 2)), c)
+				if map.get_tile(p + Vector2i.LEFT) not in ["~", "w"]:
+					ground.draw_rect(Rect2(pos, Vector2(2, T)), c)
+				if map.get_tile(p + Vector2i.RIGHT) not in ["~", "w"] and x < IslandMap.W - 1:
+					ground.draw_rect(Rect2(pos + Vector2(T - 2, 0), Vector2(2, T)), c)
+
+
+## Desenha a parte de baixo da grama alta por cima do jogador (efeito "pés na grama").
+func _draw_overlay() -> void:
+	for d in [Vector2i.ZERO, facing]:
+		var p: Vector2i = player_tile + d
+		var t := map.get_tile(p)
+		if t in ["G", "M", "B"]:
+			var tex := _tile_texture(t, p)
+			overlay.draw_texture_rect_region(tex, Rect2(p.x * T, p.y * T + 9, T, 7), Rect2(0, 9, T, 7))
+
+
+func _process(delta: float) -> void:
+	_anim_time += delta
+	var wf := int(_anim_time / 0.6) % 2
+	if wf != _water_frame:
+		_water_frame = wf
+		ground.queue_redraw()
+
+	if moving:
+		_move_t += delta / _move_dur
+		if _move_t >= 1.0:
+			_move_t = 1.0
+		player.position = _move_from.lerp(_move_to, _move_t)
+		var frame := 0
+		if _move_t > 0.1 and _move_t < 0.85:
+			frame = 1 if _step_parity else 2
+		_update_player_sprite(frame)
+		if _move_t >= 1.0:
+			moving = false
+			player.position = _move_to
+			_update_player_sprite(0)
+			_on_step_finished()
+		overlay.queue_redraw()
+		return
+
+	if busy:
+		return
+	var want := Vector2i.ZERO
+	for k in ["up", "down", "left", "right"]:
+		if Input.is_action_pressed(k):
+			want = DIRS[k]
+			break
+	if want != Vector2i.ZERO:
+		_try_move(want)
+
+
+func _try_move(d: Vector2i) -> void:
+	facing = d
+	_update_player_sprite()
+	var target := player_tile + d
+	if target == IslandMap.DOOR:
+		_enter_house()
+		return
+	if not map.is_walkable(target) or _npc_at(target) != "":
+		return
+	if map.zone_at(target) != "" and Game.party.is_empty():
+		_block_tall_grass()
+		return
+	moving = true
+	_step_parity = not _step_parity
+	_move_from = player.position
+	_move_to = _tile_to_px(target)
+	_move_t = 0.0
+	_move_dur = RUN_TIME if Input.is_action_pressed("run") else WALK_TIME
+	player_tile = target
+
+
+func _npc_at(p: Vector2i) -> String:
+	for n in map.npcs:
+		if map.npcs[n] == p:
+			return n
+	return ""
+
+
+func _on_step_finished() -> void:
+	Game.player_pos = player_tile
+	Game.player_dir = facing
+	var zone := map.zone_at(player_tile)
+	if zone != "" and Game.has_able() and randf() < ENCOUNTER_CHANCE:
+		_start_encounter(zone)
+
+
+func _start_encounter(zone: String) -> void:
+	var table: Array = DB.ENCOUNTERS[zone]
+	var total := 0
+	for e in table:
+		total += e[1]
+	var roll := randi() % total
+	for e in table:
+		roll -= e[1]
+		if roll < 0:
+			var enemy := Creature.create(e[0], randi_range(e[2], e[3]))
+			busy = true
+			battle_requested.emit(enemy, zone)
+			return
+
+
+# ---------------------------------------------------------------- interação
+
+func _unhandled_input(event: InputEvent) -> void:
+	if busy or moving:
+		return
+	var is_ok := event.is_action_pressed("ok")
+	var is_menu := event.is_action_pressed("menu")
+	if is_ok and (not is_menu or _facing_something()):
+		get_viewport().set_input_as_handled()
+		_interact()
+	elif is_menu:
+		get_viewport().set_input_as_handled()
+		_open_menu()
+
+
+func _facing_something() -> bool:
+	var t := player_tile + facing
+	return _npc_at(t) != "" or map.get_tile(t) == "S"
+
+
+func _interact() -> void:
+	var t := player_tile + facing
+	var npc := _npc_at(t)
+	if npc != "":
+		npc_sprites[npc].texture = Art.person(npc, _dir_name(-facing), 0)
+		busy = true
+		match npc:
+			"professor":
+				await _talk_professor()
+			"menina":
+				await _talk_menina()
+			"pescador":
+				await _talk_pescador()
+		msg.hide()
+		busy = false
+	elif map.get_tile(t) == "S":
+		busy = true
+		await msg.say("ILHA SAPÊ\nUm pedacinho de natureza no meio do mar.")
+		await msg.say("Ao norte: Campo dos Tatus.  Ao sul: Brejo.  A leste: Praia do Uçá.")
+		msg.hide()
+		busy = false
+
+
+func _talk_professor() -> void:
+	if not Game.flags.get("starter", false):
+		await msg.say("Olá! Eu sou a Professora Ipê. Estudo os animais desta ilha.")
+		await msg.say("Os animais vivem soltos na grama alta. Para estudá-los, você precisa de um parceiro.")
+		await msg.say("Escolha um dos três. Cada um tem um tipo diferente!")
+		msg.hide()
+		var choice := await _choose_starter()
+		var c := Creature.create(choice, 5)
+		Game.add_creature(c)
+		Game.flags["starter"] = true
+		await msg.say("Você escolheu o %s! Cuide bem dele." % c.display_name())
+		Game.add_item("rede", 5)
+		await msg.say("A Professora Ipê te deu mais 5 Redes!")
+		await msg.say("Com a Rede você captura animais selvagens. Enfraqueça-os antes para facilitar!")
+		await msg.say("Abra o menu com ENTER ou ESC. Boa pesquisa!")
+	else:
+		var tips := [
+			"Mamífero vence Ave, Ave vence Réptil e Réptil vence Mamífero. Use isso a seu favor!",
+			"Golpes do mesmo tipo do animal ficam 50% mais fortes.",
+			"Se seus animais desmaiarem, descanse em casa. Basta entrar pela porta!",
+			"Cada região da ilha tem animais diferentes. Já visitou o brejo e a praia?",
+		]
+		await msg.say(tips[randi() % tips.size()])
+
+
+func _talk_menina() -> void:
+	await msg.say("No brejo vivem sapos, pererecas e até jiboias!")
+	await msg.say("Dica: Anfíbios são fortes contra Insetos e Aquáticos, mas fracos contra Répteis.")
+
+
+func _talk_pescador() -> void:
+	if not Game.flags.get("fruta_gift", false) and not Game.party.is_empty():
+		await msg.say("Ô, amigo! Tá estudando os bichos? Leva essas frutas pra sua equipe.")
+		Game.add_item("fruta", 3)
+		Game.add_item("super_fruta", 1)
+		Game.flags["fruta_gift"] = true
+		await msg.say("Você recebeu 3 Frutas e 1 Super Fruta!")
+	else:
+		await msg.say("Os caranguejos-uçá adoram a grama da praia. Cuidado com as pinças!")
+
+
+func _block_tall_grass() -> void:
+	busy = true
+	await msg.say("PROFESSORA IPÊ: Espere! A grama alta está cheia de animais selvagens!")
+	await msg.say("Venha falar comigo primeiro, aqui perto da sua casa.")
+	msg.hide()
+	busy = false
+
+
+func _enter_house() -> void:
+	busy = true
+	await _fade(true)
+	Game.heal_party()
+	await _fade(false)
+	if Game.party.is_empty():
+		await msg.say("MÃE: Bom dia! A Professora Ipê está te esperando lá fora.")
+	else:
+		await msg.say("MÃE: Você parece cansado. Descanse um pouco...")
+		await msg.say("Seus animais estão totalmente recuperados!")
+	msg.hide()
+	busy = false
+
+
+func _fade(to_black: bool) -> void:
+	var rect := ColorRect.new()
+	rect.color = Color(0, 0, 0, 0 if to_black else 1)
+	UI.fullscreen(rect)
+	ui.add_child(rect)
+	var tw := create_tween()
+	tw.tween_property(rect, "color:a", 1.0 if to_black else 0.0, 0.3)
+	await tw.finished
+	if to_black:
+		await get_tree().create_timer(0.3).timeout
+	rect.queue_free()
+
+
+func _choose_starter() -> String:
+	var ids := ["mico", "arara", "jacare"]
+	var screen := Control.new()
+	UI.fullscreen(screen)
+	var bg := ColorRect.new()
+	bg.color = Color(0, 0, 0, 0.5)
+	UI.fullscreen(bg)
+	screen.add_child(bg)
+	var panels := []
+	for i in 3:
+		var c := Creature.create(ids[i], 5)
+		var p := UI.panel(Rect2(14 + i * 154, 30, 144, 168))
+		var spr := TextureRect.new()
+		spr.texture = Art.animal(ids[i])
+		spr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		spr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		spr.position = Vector2(4, 6)
+		spr.size = Vector2(136, 110)
+		p.add_child(spr)
+		var nl := UI.label(c.display_name(), Vector2(0, 116), 14, UI.TEXT, 144)
+		nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		p.add_child(nl)
+		p.add_child(UI.type_badge(c.type(), Vector2(34, 140)))
+		screen.add_child(p)
+		panels.append(p)
+	ui.add_child(screen)
+	var menu := ChoiceMenu.new(Rect2(14, 206, 452, 34), ["Mico-leão", "Arara-azul", "Jacaré"], 3)
+	screen.add_child(menu)
+	menu.moved.connect(func(i):
+		for j in 3:
+			var st := UI.box_style(Color("fff4e0") if j == i else Color("f8f8f0"), Color("f08030") if j == i else Color("3a4466"))
+			panels[j].add_theme_stylebox_override("panel", st))
+	menu.cancelable = false
+	var chosen := ""
+	while chosen == "":
+		var i := await menu.choose()
+		await msg.say("Escolher o %s?" % DB.SPECIES[ids[i]].name, false)
+		var yn := ChoiceMenu.new(Rect2(380, 168, 90, 70), ["SIM", "NÃO"])
+		ui.add_child(yn)
+		var r := await yn.choose()
+		yn.queue_free()
+		msg.hide()
+		if r == 0:
+			chosen = ids[i]
+	screen.queue_free()
+	return chosen
+
+
+# ---------------------------------------------------------------- menu
+
+func _open_menu() -> void:
+	busy = true
+	var has_party := not Game.party.is_empty()
+	start_menu.set_items(["EQUIPE", "MOCHILA", "REGISTRO", "SALVAR", "FECHAR"], [has_party, true, true, true, true])
+	while true:
+		var i := await start_menu.choose()
+		if i == 0:
+			party_screen.index = 0
+			await party_screen.run_view()
+		elif i == 1:
+			await _bag_flow()
+		elif i == 2:
+			await dex_screen.run()
+		elif i == 3:
+			start_menu.hide()
+			Game.player_pos = player_tile
+			Game.player_dir = facing
+			if Game.save_game():
+				await msg.say("O jogo foi salvo com sucesso!")
+			else:
+				await msg.say("Não foi possível salvar o jogo.")
+			msg.hide()
+		else:
+			break
+	start_menu.hide()
+	busy = false
+
+
+func _bag_flow() -> void:
+	while true:
+		var id := await bag_screen.pick()
+		if id == "":
+			break
+		var item: Dictionary = DB.ITEMS[id]
+		if item.has("heal"):
+			if Game.party.is_empty():
+				continue
+			bag_screen.hide()
+			party_screen.show()
+			var t := await party_screen.pick("Usar %s em qual animal?" % item.name)
+			if t >= 0:
+				var c: Creature = Game.party[t]
+				if c.is_fainted() or c.hp >= c.stats.hp:
+					await _screen_msg("Não vai ter efeito.")
+				else:
+					var healed := mini(item.heal, c.stats.hp - c.hp)
+					c.hp += healed
+					Game.use_item(id)
+					party_screen.refresh()
+					await _screen_msg("%s recuperou %d PS!" % [c.display_name(), healed])
+			party_screen.hide()
+		else:
+			await _screen_msg("Só dá para usar a Rede durante uma batalha.")
+	bag_screen.hide()
+
+
+func _screen_msg(text: String) -> void:
+	ui.move_child(msg, -1)
+	await msg.say(text)
+	msg.hide()
+
+
+## Volta para casa após perder todas as batalhas.
+func respawn_home() -> void:
+	player_tile = IslandMap.SPAWN
+	facing = Vector2i.DOWN
+	player.position = _tile_to_px(player_tile)
+	_update_player_sprite()
+	overlay.queue_redraw()
+	Game.heal_party()
+	Game.player_pos = player_tile
+	busy = true
+	await msg.say("Você correu de volta para casa e seus animais descansaram.")
+	msg.hide()
+	busy = false
