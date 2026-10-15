@@ -56,6 +56,8 @@ func set_items(item_list: Array, enabled_list: Array = []) -> void:
 			cell = Control.new()
 		cell.position = rect.position
 		cell.size = rect.size
+		cell.mouse_filter = Control.MOUSE_FILTER_STOP
+		cell.gui_input.connect(_on_cell_input.bind(i))
 		add_child(cell)
 		var x := 4.0 if button_mode else 16.0
 		var icon: Texture2D = icons[i] if i < icons.size() else null
@@ -144,6 +146,23 @@ func _move(d: Vector2i) -> void:
 	index = ni
 	_refresh()
 	moved.emit(index)
+
+
+## Mouse: passar por cima seleciona, clicar confirma.
+func _on_cell_input(event: InputEvent, i: int) -> void:
+	if not active:
+		return
+	if event is InputEventMouseMotion and index != i:
+		index = i
+		_refresh()
+		moved.emit(index)
+	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		index = i
+		_refresh()
+		if is_enabled(i):
+			active = false
+			_picked.emit.call_deferred(i)
+		accept_event()
 
 
 func _unhandled_input(event: InputEvent) -> void:

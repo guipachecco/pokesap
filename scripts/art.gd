@@ -1,10 +1,9 @@
 class_name Art
 extends RefCounted
-## Gera toda a pixel art do jogo em código (sem arquivos de imagem).
+## Pixel art de personagens, animais, ícones, painéis e fundos de batalha, gerada em
+## código (o cenário da ilha fica em world_art.gd).
 ## Sprites são descritos como linhas de caracteres + paleta. Caracteres fora da
 ## paleta são transparentes. Contorno e sombreamento são automáticos.
-
-const T := 16  # tamanho do tile
 
 static var _cache := {}
 
@@ -77,233 +76,6 @@ static func _cached(key: String, maker: Callable) -> Texture2D:
 	if not _cache.has(key):
 		_cache[key] = maker.call()
 	return _cache[key]
-
-
-## Cola img sobre base (com alfa) na posição.
-static func _blend(base: Image, img: Image, at: Vector2i) -> void:
-	base.blend_rect(img, Rect2i(Vector2i.ZERO, img.get_size()), at)
-
-
-static func _speckle(img: Image, seed_val: int, color: Color, count: int) -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_val
-	for i in count:
-		img.set_pixel(rng.randi_range(0, img.get_width() - 1), rng.randi_range(0, img.get_height() - 1), color)
-
-
-# ---------------------------------------------------------------- terreno
-
-static func tile(kind: String, frame := 0) -> Texture2D:
-	return _cached("tile_%s_%d" % [kind, frame], func(): return _tex(_make_tile(kind, frame)))
-
-
-static func _grass_img(seed_val := 1) -> Image:
-	var img := _img(T, T)
-	img.fill(Color("7ccf5a"))
-	_speckle(img, seed_val, Color("92de6c"), 10)
-	var dark := Color("5aae44")
-	for p in [Vector2i(2, 3), Vector2i(10, 6), Vector2i(5, 11), Vector2i(12, 13)]:
-		img.set_pixelv(p, dark)
-		img.set_pixelv(p + Vector2i(2, 0), dark)
-		img.set_pixelv(p + Vector2i(1, 1), dark)
-	return img
-
-
-static func _tall_grass_img(pal: Dictionary, ground: Color) -> Image:
-	var tuft := [
-		"...l....",
-		"..lgl..l",
-		".lggl.lg",
-		".lgggdlg",
-		"lggggdgg",
-		"lgggdddg",
-		"ggddddgd",
-		"dddddddd",
-	]
-	var img := _img(T, T)
-	img.fill(ground)
-	var p := pal.duplicate()
-	var timg := rows_to_image(tuft, p, false)
-	for oy in [0, 8]:
-		var shift := 0 if oy == 0 else 4
-		for ox in [-8, 0, 8, 16]:
-			_blend(img, timg, Vector2i(ox + shift, oy))
-	return img
-
-
-static func _make_tile(kind: String, frame: int) -> Image:
-	match kind:
-		"grass":
-			return _grass_img(1)
-		"grass2":
-			return _grass_img(7)
-		"flowers":
-			var img := _grass_img(3)
-			var cols := [Color("f85858"), Color("f8f070"), Color("ffffff")]
-			var spots := [Vector2i(3, 3), Vector2i(11, 4), Vector2i(6, 10), Vector2i(13, 12)]
-			for i in spots.size():
-				var s: Vector2i = spots[i]
-				var c: Color = cols[(i + frame) % cols.size()]
-				for d in [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]:
-					img.set_pixelv(s + d, c)
-				img.set_pixelv(s, Color("f8c030"))
-			return img
-		"tall":
-			return _tall_grass_img(_pal({"l": "8fe06a", "g": "4fa83c", "d": "2f7a2a"}), Color("3f8f34"))
-		"tall_swamp":
-			return _tall_grass_img(_pal({"l": "7ad0a0", "g": "3a9070", "d": "22604a"}), Color("2a7058"))
-		"tall_beach":
-			return _tall_grass_img(_pal({"l": "e8e890", "g": "b0c050", "d": "7a8a30"}), Color("d8d090"))
-		"sand":
-			var img := _img(T, T)
-			img.fill(Color("f2e2a8"))
-			_speckle(img, 11, Color("dccb8a"), 9)
-			_speckle(img, 12, Color("fff4c8"), 6)
-			return img
-		"path":
-			var img := _img(T, T)
-			img.fill(Color("e2c48a"))
-			_speckle(img, 21, Color("c8a66a"), 10)
-			_speckle(img, 22, Color("f0d8a4"), 6)
-			return img
-		"water":
-			var img := _img(T, T)
-			img.fill(Color("4a8ee0"))
-			var lite := Color("8cc4f8")
-			var off := frame * 4
-			for wy in [3, 11]:
-				var bx := (off + (0 if wy == 3 else 8)) % T
-				for i in 4:
-					img.set_pixel((bx + i) % T, wy, lite)
-				img.set_pixel((bx + 4) % T, wy + 1, lite)
-				img.set_pixel((bx + T - 1) % T, wy + 1, lite)
-			return img
-		"pond":
-			var img := _img(T, T)
-			img.fill(Color("3a7a78"))
-			var lite := Color("5aa09a")
-			var off := frame * 3
-			for i in 4:
-				img.set_pixel((2 + off + i) % T, 5, lite)
-				img.set_pixel((9 + off + i) % T, 12, lite)
-			return img
-		"tree":
-			var img := _grass_img(5)
-			var tree := rows_to_image([
-				".....gggggg.....",
-				"...ggglllgggg...",
-				"..gglllgggggggg.",
-				".ggllggggggggggg",
-				".gglgggggggggggg",
-				"gggggggggggggggd",
-				"ggggggggggggggdg",
-				"gggggggggggggdgg",
-				".ggggggggggdgggg",
-				".gggggggggdggggd",
-				"..ggggggggggggd.",
-				"...gggggggggdd..",
-				".....dttttd.....",
-				"......tttt......",
-				".....tttttt.....",
-			], _pal({"g": "3f9a3a", "l": "6cc452", "d": "2c7a2c", "t": "8a5a32"}))
-			_blend(img, tree, Vector2i(-1, -1))
-			return img
-		"rock":
-			var img := _grass_img(9)
-			var rock := rows_to_image([
-				".....gggggg.....",
-				"...ggglllgggg...",
-				"..gglllgggggggg.",
-				"..gllggggggggdg.",
-				".ggggggggggggdg.",
-				".gggggggggggddg.",
-				".ggggggggggdddg.",
-				"..gggggggdddgg..",
-				"...ggggggggg....",
-			], _pal({"g": "a8a8b0", "l": "d8d8e0", "d": "787884"}))
-			_blend(img, rock, Vector2i(-1, 4))
-			return img
-		"sign":
-			var img := _grass_img(13)
-			var sign := rows_to_image([
-				"..wwwwwwwwwwww..",
-				"..wllllllllllw..",
-				"..wlddlddlddlw..",
-				"..wllllllllllw..",
-				"..wlddddlddllw..",
-				"..wwwwwwwwwwww..",
-				"......wwww......",
-				"......wwww......",
-				"......wwww......",
-			], _pal({"w": "9a6a3a", "l": "d8b07a", "d": "7a4a22"}))
-			_blend(img, sign, Vector2i(-1, 3))
-			return img
-	var fallback := _img(T, T)
-	fallback.fill(Color.MAGENTA)
-	return fallback
-
-
-# ---------------------------------------------------------------- casa
-
-static func house() -> Texture2D:
-	return _cached("house", func(): return _tex(_make_house()))
-
-
-static func _make_house() -> Image:
-	var w := 80
-	var h := 64
-	var img := _img(w, h)
-	var roof := Color("d0504a")
-	var roof_d := Color("a03a38")
-	var roof_l := Color("e87a6a")
-	var wall := Color("f4ead0")
-	var wall_d := Color("d8c8a0")
-	var line := Color("4a3030")
-	# telhado (trapézio)
-	for y in 30:
-		var inset := int((29 - y) * 0.25)
-		for x in range(inset, w - inset):
-			var c := roof
-			if y % 6 == 5:
-				c = roof_d
-			elif (x + (y / 6) * 4) % 8 == 0:
-				c = roof_d
-			elif y < 3:
-				c = roof_l
-			img.set_pixel(x, y, c)
-	# paredes
-	for y in range(30, h):
-		for x in range(4, w - 4):
-			img.set_pixel(x, y, wall if y < h - 3 else wall_d)
-	# beiral
-	for x in w:
-		img.set_pixel(x, 29, roof_d)
-		img.set_pixel(x, 30, line)
-	# janelas
-	for wx in [10, 56]:
-		for y in range(38, 52):
-			for x in range(wx, wx + 14):
-				var edge: bool = y == 38 or y == 51 or x == wx or x == wx + 13
-				var mid: bool = x == wx + 6 or y == 44
-				img.set_pixel(x, y, line if edge else (Color("8a5a3a") if mid else Color("8cc8f0")))
-		for x in range(wx + 1, wx + 4):
-			img.set_pixel(x, 39, Color("d8f0ff"))
-	# porta
-	for y in range(40, h):
-		for x in range(32, 48):
-			var edge := x == 32 or x == 47 or y == 40
-			img.set_pixel(x, y, line if edge else Color("9a6038"))
-	img.set_pixel(43, 52, Color("f8d040"))
-	img.set_pixel(44, 52, Color("f8d040"))
-	# contorno lateral
-	for y in range(30, h):
-		img.set_pixel(4, y, line)
-		img.set_pixel(w - 5, y, line)
-	# chaminé
-	for y in range(2, 14):
-		for x in range(60, 68):
-			img.set_pixel(x, y, Color("8a7a70") if x > 60 and x < 67 else line)
-	return img
 
 
 # ---------------------------------------------------------------- personagens
@@ -481,6 +253,7 @@ const ICONS := {
 	"registro": {"sap": "owl"},
 	"fugir": {"sap": "rabbit"},
 	"chick": {"sap": "chick"},
+	"opcoes": {"vector": "engrenagem"},
 }
 
 
@@ -644,6 +417,16 @@ const VECTOR_ART := {
 	"pata": [
 		["e", 32, 44, 13, 11, "c9b98a"],
 		["c", 16, 27, 6, "c9b98a"], ["c", 26, 18, 6, "c9b98a"], ["c", 38, 18, 6, "c9b98a"], ["c", 48, 27, 6, "c9b98a"],
+	],
+	"engrenagem": [
+		["r", 27, 4, 10, 12, "8a94a4"], ["r", 27, 48, 10, 12, "8a94a4"],
+		["r", 4, 27, 12, 10, "8a94a4"], ["r", 48, 27, 12, 10, "8a94a4"],
+		["p", [10, 17, 17, 10, 25, 18, 18, 25], "8a94a4"], ["p", [54, 17, 47, 10, 39, 18, 46, 25], "8a94a4"],
+		["p", [10, 47, 17, 54, 25, 46, 18, 39], "8a94a4"], ["p", [54, 47, 47, 54, 39, 46, 46, 39], "8a94a4"],
+		["c", 32, 32, 20, "a8b2c0"],
+		["c", 29, 29, 17, "c4ccd8"],
+		["c", 32, 32, 9, "5a6474"],
+		["c", 32, 32, 6, "f5a524"],
 	],
 	"rede": [
 		["l", 34, 40, 50, 60, 4, "8a5a32"],

@@ -30,9 +30,12 @@ func _init() -> void:
 
 	var has_save := Game.has_save()
 	var items := ["CONTINUAR", "NOVO JOGO"] if has_save else ["NOVO JOGO"]
-	_menu = ChoiceMenu.new(Rect2(160, 238, 160, 14 + items.size() * 26), items)
+	items.append("CONFIGURAÇÕES")
+	var h := 12 + items.size() * 24
+	_menu = ChoiceMenu.new(Rect2(140, 302 - h, 200, h), items)
 	_menu.button_mode = true
 	_menu.cancelable = false
+	_menu.row_height = 24
 	_menu.set_items(items)
 	add_child(_menu)
 	var credit := UI.shadow_label("Sprites: Noto Emoji, Twemoji e FxEmoji (Apache-2.0 / CC BY 4.0)", Vector2(0, 306), UI.SMALL, UI.TEXT_LIGHT, UI.INK)
@@ -48,11 +51,20 @@ func _process(delta: float) -> void:
 		var x := fmod(_t * 40.0 + i * 74.0, total) - 80.0
 		_parade[i].position.x = floorf(x)
 		var hop := fmod(_t * 4.0 + i * 0.7, 2.0) < 1.0
-		_parade[i].position.y = 166 - (3 if hop else 0)
+		_parade[i].position.y = 144 - (3 if hop else 0)
 	_logo.position.y = 26 - (2 if fmod(_t, 1.2) < 0.6 else 0)
 
 
 func run() -> String:
-	var i := await _menu.choose(0)
-	var label: String = _menu.items[i]
-	return "continue" if label == "CONTINUAR" else "new"
+	var i := 0
+	while true:
+		i = await _menu.choose(i)
+		var label: String = _menu.items[i]
+		if label == "CONFIGURAÇÕES":
+			var screen := SettingsScreen.new()
+			add_child(screen)
+			await screen.run()
+			screen.queue_free()
+			continue
+		return "continue" if label == "CONTINUAR" else "new"
+	return "new"

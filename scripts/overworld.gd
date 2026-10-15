@@ -180,15 +180,15 @@ func _build_world() -> void:
 				"S":
 					_add_object(WorldArt.sign_post(), base, Vector2(-8, -13), "sign")
 				"G", "M", "B":
-					# a fileira de baixo dos tufos deste tile, desenhada na frente de
+					# a parte de baixo dos tufos deste tile, desenhada na frente de
 					# quem está nele (cobre as pernas, como nos clássicos)
 					var front := Sprite2D.new()
 					front.centered = false
 					front.region_enabled = true
-					front.region_rect = Rect2(x * T, y * T + 6, T, 10)
+					front.region_rect = Rect2(x * T, y * T + 10, T, 6)
 					# 1 px abaixo da base: fica na frente de quem está neste tile
 					front.position = Vector2(x * T, (y + 1) * T + 1)
-					front.offset = Vector2(0, -11)
+					front.offset = Vector2(0, -7)
 					objects.add_child(front)
 					_grass_fronts.append(front)
 				"~", "w":
@@ -657,8 +657,8 @@ func _choose_starter() -> String:
 func _open_menu() -> void:
 	busy = true
 	var has_party := not Game.party.is_empty()
-	start_menu.icons = [Art.animal(Game.party[0].species, 32) if has_party else Art.icon("equipe"), Art.icon("fruta"), Art.icon("registro"), Art.icon("mel"), null]
-	start_menu.set_items(["EQUIPE", "MOCHILA", "REGISTRO", "SALVAR", "FECHAR"], [has_party, true, true, true, true])
+	start_menu.icons = [Art.animal(Game.party[0].species, 32) if has_party else Art.icon("equipe"), Art.icon("fruta"), Art.icon("registro"), Art.icon("mel"), Art.icon("opcoes"), null]
+	start_menu.set_items(["EQUIPE", "MOCHILA", "REGISTRO", "SALVAR", "OPÇÕES", "FECHAR"], [has_party, true, true, true, true, true])
 	while true:
 		var i := await start_menu.choose()
 		if i == 0:
@@ -677,6 +677,12 @@ func _open_menu() -> void:
 			else:
 				await msg.say("Não foi possível salvar o jogo.")
 			msg.hide()
+		elif i == 4:
+			start_menu.hide()
+			var screen := SettingsScreen.new()
+			ui.add_child(screen)
+			await screen.run()
+			screen.queue_free()
 		else:
 			break
 	start_menu.hide()

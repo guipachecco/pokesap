@@ -134,6 +134,12 @@ func _ready() -> void:
 	get_tree().quit()
 
 
+## O cursor do mouse (de quem está usando o PC) não deve escolher itens dos menus.
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouse:
+		get_viewport().set_input_as_handled()
+
+
 func _battle() -> Battle:
 	for c in main.get_children():
 		if c is Battle and not c.is_queued_for_deletion():
