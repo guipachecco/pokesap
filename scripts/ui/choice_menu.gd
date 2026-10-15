@@ -1,19 +1,26 @@
 class_name ChoiceMenu
 extends Panel
 ## Menu de opções navegável por teclado. Use: var i = await menu.choose()  (-1 = cancelado)
+## Dois estilos: lista com cursor ▶ (padrão) ou botões (button_mode), ambos com ícones opcionais.
 
 signal _picked(index: int)
 signal moved(index: int)
 
 var items: Array = []
 var enabled: Array = []
+var icons: Array = []   # Texture2D (32 px) ou null por item
+var tints: Array = []   # cor de fundo por item (modo botão)
 var columns := 1
 var index := 0
 var active := false
 var cancelable := true
-var font_size := 13
-var row_height := 20.0
+var button_mode := false
+var font_size := UI.NORMAL
+var row_height := 26.0
+var _cells: Array[Control] = []
 var _labels: Array[Label] = []
+var _cursor: Label
+var _t := 0.0
 
 
 func _init(rect := Rect2(0, 0, 100, 60), item_list: Array = [], cols := 1) -> void:
@@ -28,19 +35,47 @@ func _init(rect := Rect2(0, 0, 100, 60), item_list: Array = [], cols := 1) -> vo
 func set_items(item_list: Array, enabled_list: Array = []) -> void:
 	items = item_list
 	enabled = enabled_list
-	for l in _labels:
-		l.queue_free()
+	for c in _cells:
+		c.queue_free()
+	_cells.clear()
 	_labels.clear()
-	var col_w := (size.x - 16.0) / columns
+	if _cursor:
+		_cursor.queue_free()
+		_cursor = null
+	var pad := 6.0
+	var col_w := (size.x - pad * 2) / columns
 	var rows := ceili(items.size() / float(columns))
-	var top := maxf(6.0, (size.y - rows * row_height) / 2.0)
+	var top := maxf(pad, (size.y - rows * row_height) / 2.0)
 	for i in items.size():
-		var l := UI.label("", Vector2(8 + (i % columns) * col_w, top + (i / columns) * row_height), font_size)
-		l.size = Vector2(col_w, row_height)
+		var cell: Control
+		var rect := Rect2(pad + (i % columns) * col_w, top + (i / columns) * row_height, col_w, row_height)
+		if button_mode:
+			cell = Panel.new()
+			rect = rect.grow(-1)
+		else:
+			cell = Control.new()
+		cell.position = rect.position
+		cell.size = rect.size
+		add_child(cell)
+		var x := 4.0 if button_mode else 16.0
+		var icon: Texture2D = icons[i] if i < icons.size() else null
+		if icon:
+			var ir := UI.sprite_rect(icon, Vector2(x - 2, floorf((rect.size.y - 32) / 2.0)))
+			cell.add_child(ir)
+			x += 32
+		var txt := str(items[i])
+		var fs := font_size
+		if UI.text_width(txt, fs) > rect.size.x - x - 4 and fs > UI.SMALL:
+			fs = UI.SMALL
+		var l := UI.label(txt, Vector2(x + 2, 0), fs)
+		l.size = Vector2(rect.size.x - x - 2, rect.size.y)
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		l.clip_text = true
-		add_child(l)
+		cell.add_child(l)
+		_cells.append(cell)
 		_labels.append(l)
+	if not button_mode:
+		_cursor = UI.label("▶", Vector2.ZERO, UI.NORMAL, UI.RED)
+		add_child(_cursor)
 	index = clampi(index, 0, maxi(0, items.size() - 1))
 	_refresh()
 
@@ -52,10 +87,31 @@ func is_enabled(i: int) -> bool:
 
 
 func _refresh() -> void:
-	for i in _labels.size():
-		var l := _labels[i]
-		l.text = ("▶ " if i == index and active else "   ") + str(items[i])
-		l.add_theme_color_override("font_color", UI.TEXT if is_enabled(i) else UI.DISABLED)
+	for i in _cells.size():
+		var on := is_enabled(i)
+		_labels[i].add_theme_color_override("font_color", UI.TEXT if on else UI.DISABLED)
+		if button_mode:
+			var base: Color = tints[i] if i < tints.size() and tints[i] != null else UI.CREAM
+			var sel := i == index and active
+			var bg := UI.SELECT_BG if sel else base
+			if not on:
+				bg = Color("e4dccc")
+			_cells[i].add_theme_stylebox_override("panel", Art.panel_style(bg, UI.ACCENT.darkened(0.2) if sel else UI.INK))
+		for c in _cells[i].get_children():
+			if c is TextureRect:
+				c.modulate = Color(1, 1, 1, 1) if on else Color(1, 1, 1, 0.4)
+	if _cursor:
+		_cursor.visible = active and index < _cells.size()
+		if _cursor.visible:
+			var cell := _cells[index]
+			_cursor.position = cell.position + Vector2(2, (row_height - 22) / 2.0 + 1)
+
+
+func _process(delta: float) -> void:
+	if active and _cursor and _cursor.visible:
+		_t += delta
+		var cell := _cells[index]
+		_cursor.position.x = cell.position.x + 1 + (1 if fmod(_t, 0.5) < 0.25 else 0)
 
 
 func choose(start := -1) -> int:

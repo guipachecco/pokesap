@@ -18,7 +18,7 @@ func _ready() -> void:
 	print("Espécies e golpes")
 	for id in db.SPECIES:
 		var sp: Dictionary = db.SPECIES[id]
-		check(Art.ANIMALS.has(id), "%s tem sprite" % id)
+		check(Art.has_animal(id) and Art.animal(id).get_width() == 64, "%s tem sprite 64px" % id)
 		check(db.TYPE_NAMES.has(sp.type), "%s tem tipo válido" % id)
 		for e in sp.learn:
 			check(db.MOVES.has(e[1]), "%s aprende golpe existente %s" % [id, e[1]])

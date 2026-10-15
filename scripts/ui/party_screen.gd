@@ -1,6 +1,6 @@
 class_name PartyScreen
 extends Control
-## Tela da equipe: escolher animal, ver resumo e trocar ordem.
+## Tela da equipe: cartões com sprite, PS e nível. Escolher animal, ver resumo e trocar ordem.
 
 signal _picked(index: int)
 
@@ -9,27 +9,23 @@ var active := false
 var cancelable := true
 var swap_from := -1
 var _slots: Array[Panel] = []
+var _sprites: Array[TextureRect] = []
 var _prompt: Label
 var _sub: ChoiceMenu
+var _t := 0.0
 
 
 func _init() -> void:
 	UI.fullscreen(self)
-	var bg := ColorRect.new()
-	bg.color = Color("4a8a6a")
-	UI.fullscreen(bg)
-	add_child(bg)
-	var stripes := Control.new()
-	stripes.draw.connect(func():
-		for i in range(0, 40):
-			stripes.draw_rect(Rect2(0, i * 8, 480, 4), Color(1, 1, 1, 0.04)))
-	UI.fullscreen(stripes)
-	add_child(stripes)
+	add_child(UI.checker_bg(Color("8fd0a0"), Color("82c694")))
+	var title := UI.panel(Rect2(8, 6, 150, 30), UI.WOOD, UI.WOOD_DARK.darkened(0.3))
+	title.add_child(UI.shadow_label("EQUIPE", Vector2(14, 4), UI.NORMAL))
+	add_child(title)
 	var bottom := UI.panel(Rect2(4, 270, 472, 46))
-	_prompt = UI.label("", Vector2(14, 12), 14)
+	_prompt = UI.label("", Vector2(14, 12), UI.NORMAL)
 	bottom.add_child(_prompt)
 	add_child(bottom)
-	_sub = ChoiceMenu.new(Rect2(340, 196, 136, 70))
+	_sub = ChoiceMenu.new(Rect2(330, 196, 146, 70))
 	_sub.hide()
 	add_child(_sub)
 
@@ -38,27 +34,37 @@ func refresh() -> void:
 	for s in _slots:
 		s.queue_free()
 	_slots.clear()
+	_sprites.clear()
 	for i in Game.party.size():
 		var c: Creature = Game.party[i]
-		var p := UI.panel(Rect2(8 + (i % 2) * 236, 8 + (i / 2) * 86, 228, 80))
-		var icon := TextureRect.new()
-		icon.texture = Art.animal(c.species)
-		icon.position = Vector2(4, 6)
-		icon.size = Vector2(68, 68)
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		p.add_child(icon)
-		p.add_child(UI.label(c.display_name(), Vector2(76, 8), 14))
-		p.add_child(UI.label("Nv %d" % c.level, Vector2(176, 10), 12))
+		var p := Panel.new()
+		p.position = Vector2(8 + (i % 2) * 236, 42 + (i / 2) * 76)
+		p.size = Vector2(228, 70)
+		# sombra no chão + sprite 64 px "em pé" sobre o cartão
+		var shadow := Control.new()
+		shadow.draw.connect(func():
+			shadow.draw_rect(Rect2(10, 58, 48, 4), Color(0, 0, 0, 0.18))
+			shadow.draw_rect(Rect2(14, 57, 40, 6), Color(0, 0, 0, 0.18)))
+		p.add_child(shadow)
+		var spr := UI.sprite_rect(Art.animal(c.species), Vector2(2, -2), 1, true)
+		p.add_child(spr)
+		_sprites.append(spr)
+		p.add_child(UI.label(c.display_name(), Vector2(72, 4), UI.NORMAL))
+		var lv := UI.panel(Rect2(176, 28, 44, 18), UI.ACCENT, UI.INK)
+		lv.add_child(UI.shadow_label("Nv%d" % c.level, Vector2(5, 2), UI.SMALL))
+		p.add_child(lv)
+		p.add_child(UI.label("♥", Vector2(72, 30), UI.SMALL, UI.RED))
 		var bar := HPBar.new()
-		bar.position = Vector2(100, 36)
-		bar.size = Vector2(116, 8)
+		bar.position = Vector2(82, 33)
+		bar.size = Vector2(88, 7)
 		bar.ratio = float(c.hp) / c.stats.hp
 		p.add_child(bar)
-		p.add_child(UI.label("PS", Vector2(78, 31), 10, Color("e08030")))
-		p.add_child(UI.label("%d/%d" % [c.hp, c.stats.hp], Vector2(130, 48), 12))
+		p.add_child(UI.label("%d/%d" % [c.hp, c.stats.hp], Vector2(82, 44), UI.SMALL, UI.TEXT_MUTED))
 		if c.is_fainted():
-			p.add_child(UI.label("DESMAIADO", Vector2(78, 56), 10, Color("d04040")))
+			spr.modulate = Color(0.45, 0.45, 0.5)
+			var tag := UI.panel(Rect2(120, 44, 100, 18), UI.RED, UI.INK)
+			tag.add_child(UI.shadow_label("DESMAIADO", Vector2(8, 2), UI.SMALL))
+			p.add_child(tag)
 		add_child(p)
 		_slots.append(p)
 	move_child(_sub, -1)
@@ -67,13 +73,23 @@ func refresh() -> void:
 
 func _update_cursor() -> void:
 	for i in _slots.size():
-		var st: StyleBoxFlat = UI.box_style()
+		var sel := i == index and active
+		var bg := UI.CREAM
 		if i == swap_from:
-			st.bg_color = Color("f8e8b0")
-		if i == index and active:
-			st.border_color = Color("f08030")
-			st.bg_color = Color("fff4e0") if i != swap_from else Color("f8e0a0")
-		_slots[i].add_theme_stylebox_override("panel", st)
+			bg = Color("ffe2a8")
+		elif sel:
+			bg = UI.SELECT_BG
+		_slots[i].add_theme_stylebox_override("panel", Art.panel_style(bg, UI.ACCENT.darkened(0.25) if sel else UI.INK))
+		_slots[i].position.y = 42 + (i / 2) * 76 - (2 if sel else 0)
+
+
+func _process(delta: float) -> void:
+	if not visible:
+		return
+	_t += delta
+	for i in _sprites.size():
+		var hop := i == index and active and fmod(_t, 0.5) < 0.25
+		_sprites[i].position.y = -2 - (2 if hop else 0)
 
 
 ## Escolhe um animal. Retorna o índice ou -1.
@@ -91,7 +107,7 @@ func pick(prompt: String, can_cancel := true) -> int:
 
 
 func submenu(options: Array) -> int:
-	_sub.size.y = 16 + options.size() * 20
+	_sub.size.y = 16 + options.size() * 26
 	_sub.position.y = 266 - _sub.size.y
 	_sub.set_items(options)
 	_sub.index = 0

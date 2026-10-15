@@ -1,6 +1,6 @@
 class_name HPBar
 extends Control
-## Barra de PS (verde/amarelo/vermelho) ou de experiência.
+## Barra de PS (verde/amarelo/vermelho) ou de experiência, em pixel art.
 
 var exp_mode := false
 var ratio := 1.0:
@@ -10,13 +10,19 @@ var ratio := 1.0:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color("404858"))
-	var inner := Rect2(Vector2(1, 1), size - Vector2(2, 2))
-	draw_rect(inner, Color("e8e8e0") if exp_mode else Color("586070"))
-	var c := Color("48a8f8")
+	var w := floorf(size.x)
+	var h := floorf(size.y)
+	# contorno com cantos recortados
+	draw_rect(Rect2(1, 0, w - 2, h), UI.INK)
+	draw_rect(Rect2(0, 1, w, h - 2), UI.INK)
+	var inner := Rect2(1, 1, w - 2, h - 2)
+	draw_rect(inner, Color("e9dcc0") if exp_mode else Color("6b5a52"))
+	var c := Color("5ab8f8")
 	if not exp_mode:
-		c = Color("58d068") if ratio > 0.5 else (Color("f8c838") if ratio > 0.2 else Color("f05848"))
+		c = Color("62d058") if ratio > 0.5 else (Color("f8c838") if ratio > 0.2 else Color("f05a48"))
 	if ratio > 0.0:
-		var w := maxf(1.0, inner.size.x * ratio)
-		draw_rect(Rect2(inner.position, Vector2(w, inner.size.y)), c)
-		draw_rect(Rect2(inner.position, Vector2(w, 1)), c.lightened(0.35))
+		var fw := maxf(1.0, roundf(inner.size.x * ratio))
+		draw_rect(Rect2(inner.position, Vector2(fw, inner.size.y)), c)
+		if inner.size.y >= 3:
+			draw_rect(Rect2(inner.position, Vector2(fw, 1)), c.lightened(0.45))
+			draw_rect(Rect2(inner.position + Vector2(0, inner.size.y - 1), Vector2(fw, 1)), c.darkened(0.25))

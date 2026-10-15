@@ -1,64 +1,55 @@
 class_name TitleScreen
 extends Control
-## Tela inicial. run() retorna "new" ou "continue".
+## Tela inicial com desfile de animais. run() retorna "new" ou "continue".
 
 var _menu: ChoiceMenu
 var _t := 0.0
-var _sprites: Array[TextureRect] = []
+var _parade: Array[TextureRect] = []
+var _logo: Control
 
 
 func _init() -> void:
 	UI.fullscreen(self)
-	var bg := Control.new()
-	UI.fullscreen(bg)
-	bg.draw.connect(func():
-		for i in 40:
-			bg.draw_rect(Rect2(0, i * 8, 480, 8), Color("2a6ac8").lerp(Color("8ad0f8"), i / 40.0))
-		bg.draw_rect(Rect2(0, 230, 480, 90), Color("78c858"))
-		bg.draw_rect(Rect2(0, 230, 480, 4), Color("a0e078"))
-		for x in range(0, 480, 24):
-			bg.draw_rect(Rect2(x + 6, 240 + (x / 24 % 3) * 20, 4, 4), Color("58a840")))
-	add_child(bg)
+	add_child(UI.sprite_rect(Art.battle_bg("campo", false), Vector2.ZERO, 2))
 
-	var title := UI.label("POKESAP", Vector2(0, 24), 64, Color("f8d838"), 480)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_color_override("font_outline_color", Color("203060"))
-	title.add_theme_constant_override("outline_size", 14)
-	add_child(title)
-	var sub := UI.label("Animais de Verdade", Vector2(0, 104), 18, Color.WHITE, 480)
+	_logo = UI.outlined_label("POKESAP", Vector2(0, 26), 66, UI.ACCENT, UI.INK, 480)
+	add_child(_logo)
+	var ribbon := UI.panel(Rect2(130, 104, 220, 30), UI.RED, UI.INK)
+	var sub := UI.shadow_label("ANIMAIS DE VERDADE", Vector2(0, 4), UI.NORMAL, UI.TEXT_LIGHT, UI.INK)
+	sub.size.x = 220
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sub.add_theme_color_override("font_outline_color", Color("203060"))
-	sub.add_theme_constant_override("outline_size", 6)
-	add_child(sub)
+	ribbon.add_child(sub)
+	add_child(ribbon)
 
-	var ids := ["arara", "mico", "jacare"]
-	for i in 3:
-		var s := TextureRect.new()
-		s.texture = Art.animal(ids[i])
-		s.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		s.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		s.size = Vector2(102, 102)
-		s.position = Vector2(40 + i * 150, 136)
-		s.flip_h = i == 0
+	# desfile: todos os animais andando pelo campo
+	var ids := DB.species_ids_by_num()
+	for i in ids.size():
+		var s := UI.sprite_rect(Art.animal(ids[i]), Vector2(-80 - i * 74, 170), 1, true)
 		add_child(s)
-		_sprites.append(s)
+		_parade.append(s)
 
 	var has_save := Game.has_save()
 	var items := ["CONTINUAR", "NOVO JOGO"] if has_save else ["NOVO JOGO"]
-	_menu = ChoiceMenu.new(Rect2(170, 244, 140, 16 + items.size() * 22), items)
-	_menu.row_height = 22
+	_menu = ChoiceMenu.new(Rect2(160, 238, 160, 14 + items.size() * 26), items)
+	_menu.button_mode = true
 	_menu.cancelable = false
 	_menu.set_items(items)
 	add_child(_menu)
-	var hint := UI.label("Setas: andar   Z/Enter: confirmar   X/Esc: voltar   Shift: correr", Vector2(0, 302), 10, Color("1a3a1a"), 480)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	add_child(hint)
+	var credit := UI.shadow_label("Sprites: Noto Emoji, Twemoji e FxEmoji (Apache-2.0 / CC BY 4.0)", Vector2(0, 306), UI.SMALL, UI.TEXT_LIGHT, UI.INK)
+	credit.size.x = 480
+	credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(credit)
 
 
 func _process(delta: float) -> void:
 	_t += delta
-	for i in _sprites.size():
-		_sprites[i].position.y = 136 + sin(_t * 3.0 + i * 1.3) * 4.0
+	var total := _parade.size() * 74.0 + 480.0
+	for i in _parade.size():
+		var x := fmod(_t * 40.0 + i * 74.0, total) - 80.0
+		_parade[i].position.x = floorf(x)
+		var hop := fmod(_t * 4.0 + i * 0.7, 2.0) < 1.0
+		_parade[i].position.y = 166 - (3 if hop else 0)
+	_logo.position.y = 26 - (2 if fmod(_t, 1.2) < 0.6 else 0)
 
 
 func run() -> String:

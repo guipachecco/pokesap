@@ -7,6 +7,7 @@ var fx: CanvasLayer
 
 func _ready() -> void:
 	UI.setup_input()
+	UI.setup_theme()
 	randomize()
 	fx = CanvasLayer.new()
 	fx.layer = 50

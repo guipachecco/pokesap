@@ -4,13 +4,8 @@ extends CanvasLayer
 
 signal finished(result: String)  # "win", "lose", "run", "caught"
 
-const ENEMY_POS := Vector2(352, 136)
-const PLAYER_POS := Vector2(128, 238)
-const ZONE_COLORS := {
-	"campo": [Color("b8e8f8"), Color("98d070"), Color("78b858")],
-	"brejo": [Color("a8d8d0"), Color("6aa888"), Color("4a8a6a")],
-	"praia": [Color("a8e0f8"), Color("f0e0a0"), Color("d8c080")],
-}
+const ENEMY_POS := Vector2(352, 146)
+const PLAYER_POS := Vector2(128, 250)
 
 var enemy: Creature
 var mine: Creature
@@ -18,7 +13,10 @@ var zone := "campo"
 var participants: Array[Creature] = []
 var run_attempts := 0
 
-var bg: Control
+var bg: TextureRect
+var enemy_icon: TextureRect
+var mine_icon: TextureRect
+var _t := 0.0
 var enemy_spr: Sprite2D
 var mine_spr: Sprite2D
 var enemy_box: Panel
@@ -36,7 +34,7 @@ var action_menu: ChoiceMenu
 var move_menu: ChoiceMenu
 var move_info: Panel
 var move_pp: Label
-var move_type: Label
+var move_type: Control
 var party_screen: PartyScreen
 var bag_screen: BagScreen
 var net_spr: Sprite2D
@@ -72,74 +70,90 @@ static func exp_reward(defeated: Creature) -> int:
 
 func _ready() -> void:
 	layer = 10
-	bg = Control.new()
+	bg = TextureRect.new()
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	UI.fullscreen(bg)
-	bg.draw.connect(_draw_bg)
 	add_child(bg)
 
 	enemy_spr = Sprite2D.new()
-	enemy_spr.scale = Vector2(3, 3)
-	enemy_spr.offset = Vector2(0, -17)
+	enemy_spr.scale = Vector2(2, 2)
+	enemy_spr.offset = Vector2(0, -32)
 	add_child(enemy_spr)
 	mine_spr = Sprite2D.new()
-	mine_spr.scale = Vector2(3.5, 3.5)
-	mine_spr.offset = Vector2(0, -17)
+	mine_spr.scale = Vector2(2, 2)
+	mine_spr.offset = Vector2(0, -32)
 	mine_spr.flip_h = true
 	add_child(mine_spr)
 	net_spr = Sprite2D.new()
-	net_spr.texture = Art.net()
+	net_spr.texture = Art.icon("rede")
 	net_spr.scale = Vector2(2, 2)
 	net_spr.hide()
 	add_child(net_spr)
 
-	enemy_box = UI.panel(Rect2(14, 14, 206, 56))
-	enemy_name = UI.label("", Vector2(12, 5), 14)
-	enemy_lvl = UI.label("", Vector2(150, 6), 13)
+	# cartão do inimigo
+	enemy_box = UI.panel(Rect2(10, 10, 214, 54))
+	enemy_icon = UI.sprite_rect(Art.type_icon("normal"), Vector2(4, 11))
+	enemy_box.add_child(enemy_icon)
+	enemy_name = UI.label("", Vector2(40, 4), UI.NORMAL)
 	enemy_box.add_child(enemy_name)
-	enemy_box.add_child(enemy_lvl)
-	enemy_box.add_child(UI.label("PS", Vector2(40, 29), 10, Color("e08030")))
+	var elv := UI.panel(Rect2(162, 6, 46, 18), UI.ACCENT, UI.INK)
+	enemy_lvl = UI.shadow_label("", Vector2(5, 2), UI.SMALL)
+	elv.add_child(enemy_lvl)
+	enemy_box.add_child(elv)
+	enemy_box.add_child(UI.label("♥", Vector2(40, 30), UI.SMALL, UI.RED))
 	enemy_bar = HPBar.new()
-	enemy_bar.position = Vector2(62, 33)
-	enemy_bar.size = Vector2(128, 8)
+	enemy_bar.position = Vector2(50, 33)
+	enemy_bar.size = Vector2(156, 8)
 	enemy_box.add_child(enemy_bar)
 	add_child(enemy_box)
 
-	mine_box = UI.panel(Rect2(262, 158, 212, 78))
-	mine_name = UI.label("", Vector2(12, 5), 14)
-	mine_lvl = UI.label("", Vector2(156, 6), 13)
+	# cartão do jogador
+	mine_box = UI.panel(Rect2(256, 158, 218, 80))
+	mine_icon = UI.sprite_rect(Art.type_icon("normal"), Vector2(4, 8))
+	mine_box.add_child(mine_icon)
+	mine_name = UI.label("", Vector2(40, 4), UI.NORMAL)
 	mine_box.add_child(mine_name)
-	mine_box.add_child(mine_lvl)
-	mine_box.add_child(UI.label("PS", Vector2(44, 29), 10, Color("e08030")))
+	var mlv := UI.panel(Rect2(166, 6, 46, 18), UI.ACCENT, UI.INK)
+	mine_lvl = UI.shadow_label("", Vector2(5, 2), UI.SMALL)
+	mlv.add_child(mine_lvl)
+	mine_box.add_child(mlv)
+	mine_box.add_child(UI.label("♥", Vector2(40, 30), UI.SMALL, UI.RED))
 	mine_bar = HPBar.new()
-	mine_bar.position = Vector2(66, 33)
-	mine_bar.size = Vector2(128, 8)
+	mine_bar.position = Vector2(50, 33)
+	mine_bar.size = Vector2(160, 8)
 	mine_box.add_child(mine_bar)
-	mine_hp_text = UI.label("", Vector2(110, 42), 13)
+	mine_hp_text = UI.label("", Vector2(110, 42), UI.NORMAL, UI.TEXT, 100)
+	mine_hp_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	mine_box.add_child(mine_hp_text)
-	mine_box.add_child(UI.label("EXP", Vector2(12, 61), 9, Color("4878c8")))
+	mine_box.add_child(UI.label("EXP", Vector2(8, 61), UI.SMALL, UI.BLUE))
 	mine_exp = HPBar.new()
 	mine_exp.exp_mode = true
-	mine_exp.position = Vector2(40, 64)
-	mine_exp.size = Vector2(160, 5)
+	mine_exp.position = Vector2(34, 64)
+	mine_exp.size = Vector2(176, 5)
 	mine_box.add_child(mine_exp)
 	add_child(mine_box)
 
 	msg = MessageBox.new()
 	add_child(msg)
-	action_menu = ChoiceMenu.new(Rect2(268, 244, 208, 72), ["LUTAR", "MOCHILA", "EQUIPE", "FUGIR"], 2)
-	action_menu.font_size = 14
-	action_menu.row_height = 26
-	action_menu.set_items(action_menu.items)
+	action_menu = ChoiceMenu.new(Rect2(220, 244, 256, 72), [], 2)
+	action_menu.button_mode = true
+	action_menu.row_height = 31
+	action_menu.icons = [Art.icon("lutar"), Art.icon("fruta"), Art.icon("equipe"), Art.icon("fugir")]
+	action_menu.tints = [Color("ffd9c8"), Color("e2f4c8"), Color("d8ecff"), Color("f0e4ff")]
+	action_menu.set_items(["LUTAR", "MOCHILA", "EQUIPE", "FUGIR"])
 	action_menu.hide()
 	add_child(action_menu)
 	move_menu = ChoiceMenu.new(Rect2(4, 244, 324, 72), [], 2)
-	move_menu.row_height = 26
+	move_menu.button_mode = true
+	move_menu.row_height = 31
 	move_menu.hide()
 	move_menu.moved.connect(_on_move_hover)
 	add_child(move_menu)
 	move_info = UI.panel(Rect2(330, 244, 146, 72))
-	move_pp = UI.label("", Vector2(12, 10), 14)
-	move_type = UI.label("", Vector2(12, 38), 13)
+	move_pp = UI.label("", Vector2(10, 6), UI.NORMAL)
+	move_type = Control.new()
+	move_type.position = Vector2(8, 32)
 	move_info.add_child(move_pp)
 	move_info.add_child(move_type)
 	move_info.hide()
@@ -153,45 +167,37 @@ func _ready() -> void:
 	add_child(bag_screen)
 
 
-func _draw_bg() -> void:
-	var cols: Array = ZONE_COLORS.get(zone, ZONE_COLORS.campo)
-	bg.draw_rect(Rect2(0, 0, 480, 320), cols[0])
-	for i in 6:
-		bg.draw_rect(Rect2(0, 96 + i * 4, 480, 4), cols[0].lerp(cols[1], i / 6.0))
-	bg.draw_rect(Rect2(0, 120, 480, 200), cols[1])
-	# nuvens
-	for c in [Vector2(60, 40), Vector2(200, 24), Vector2(420, 60)]:
-		bg.draw_circle(c, 14, Color(1, 1, 1, 0.8))
-		bg.draw_circle(c + Vector2(16, 4), 11, Color(1, 1, 1, 0.8))
-		bg.draw_circle(c + Vector2(-15, 5), 10, Color(1, 1, 1, 0.8))
-	_ellipse(ENEMY_POS + Vector2(0, -2), Vector2(84, 18), cols[2])
-	_ellipse(PLAYER_POS + Vector2(0, -2), Vector2(100, 20), cols[2])
+## Respiração dos sprites (1 px, sem borrar os pixels).
+func _process(delta: float) -> void:
+	_t += delta
+	enemy_spr.offset.y = -32 - (1 if fmod(_t, 1.0) < 0.5 else 0)
+	mine_spr.offset.y = -32 - (1 if fmod(_t + 0.5, 1.0) < 0.5 else 0)
 
 
-func _ellipse(center: Vector2, radii: Vector2, color: Color) -> void:
-	var pts := PackedVector2Array()
-	for i in 32:
-		var a := TAU * i / 32.0
-		pts.append(center + Vector2(cos(a) * radii.x, sin(a) * radii.y))
-	bg.draw_colored_polygon(pts, color)
-	var inner := PackedVector2Array()
-	for p in pts:
-		inner.append(center + (p - center) * Vector2(0.8, 0.6) + Vector2(0, -2))
-	bg.draw_colored_polygon(inner, color.lightened(0.12))
+## Número de dano que sobe e some.
+func _popup(text: String, at: Vector2, color: Color) -> void:
+	var l := UI.outlined_label(text, at, UI.BIG, color, UI.INK)
+	add_child(l)
+	var tw := create_tween()
+	tw.tween_property(l, "position:y", at.y - 26, 0.6).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(l, "modulate:a", 0.0, 0.3).set_delay(0.45)
+	tw.tween_callback(l.queue_free)
 
 
 func _refresh_enemy_box() -> void:
 	enemy_name.text = enemy.display_name()
 	enemy_lvl.text = "Nv%d" % enemy.level
 	enemy_bar.ratio = float(enemy.hp) / enemy.stats.hp
+	enemy_icon.texture = Art.type_icon(enemy.type())
 
 
 func _refresh_mine_box() -> void:
 	mine_name.text = mine.display_name()
 	mine_lvl.text = "Nv%d" % mine.level
 	mine_bar.ratio = float(mine.hp) / mine.stats.hp
-	mine_hp_text.text = "%d/ %d" % [mine.hp, mine.stats.hp]
+	mine_hp_text.text = "%d/%d" % [mine.hp, mine.stats.hp]
 	mine_exp.ratio = mine.exp_fraction()
+	mine_icon.texture = Art.type_icon(mine.type())
 
 
 # ---------------------------------------------------------------- fluxo principal
@@ -199,7 +205,7 @@ func _refresh_mine_box() -> void:
 func start(wild: Creature, zone_id: String) -> void:
 	enemy = wild
 	zone = zone_id
-	bg.queue_redraw()
+	bg.texture = Art.battle_bg(zone)
 	Game.seen[enemy.species] = true
 	mine = Game.first_able()
 	participants = [mine]
@@ -216,7 +222,7 @@ func start(wild: Creature, zone_id: String) -> void:
 	tw.tween_property(enemy_spr, "position", ENEMY_POS, 0.6).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	await tw.finished
 	enemy_box.show()
-	await msg.say("Um %s selvagem apareceu!" % enemy.display_name())
+	await msg.say("%s selvagem apareceu!" % enemy.display_name())
 	await _send_out(mine)
 	await _battle_loop()
 
@@ -231,7 +237,7 @@ func _send_out(c: Creature) -> void:
 	await msg.say("Vai, %s!" % c.display_name(), false)
 	mine_spr.show()
 	mine_spr.position = PLAYER_POS + Vector2(-200, 0)
-	mine_spr.scale = Vector2(3.5, 3.5)
+	mine_spr.scale = Vector2(2, 2)
 	var tw := create_tween()
 	tw.tween_property(mine_spr, "position", PLAYER_POS, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tw.finished
@@ -251,11 +257,11 @@ func _battle_loop() -> void:
 ## Retorna {kind: "move"/"item"/"switch"/"run", ...}
 func _choose_action() -> Dictionary:
 	while true:
-		msg.label.size.x = 250
+		msg.text_width = 196
 		await msg.say("O que %s vai fazer?" % mine.display_name(), false)
 		var a := await action_menu.choose()
 		action_menu.hide()
-		msg.label.size.x = msg.size.x - 36
+		msg.text_width = 0.0
 		match a:
 			0:
 				var mv := await _choose_move()
@@ -286,6 +292,10 @@ func _choose_move() -> int:
 		await msg.say("%s não tem mais golpes!" % mine.display_name())
 		return 99  # Esforço
 	msg.hide()
+	var tints := []
+	for m in mine.moves:
+		tints.append(DB.TYPE_COLORS[DB.MOVES[m.id].type].lightened(0.6))
+	move_menu.tints = tints
 	move_menu.set_items(names, en)
 	move_info.show()
 	var r := await move_menu.choose(mini(move_menu.index, names.size() - 1))
@@ -300,9 +310,11 @@ func _on_move_hover(i: int) -> void:
 		return
 	var slot: Dictionary = mine.moves[i]
 	var m: Dictionary = DB.MOVES[slot.id]
-	move_pp.text = "PP  %d/%d" % [slot.pp, m.pp]
-	move_type.text = "TIPO/" + DB.TYPE_NAMES[m.type].to_upper()
-	move_type.add_theme_color_override("font_color", DB.TYPE_COLORS[m.type].darkened(0.3))
+	move_pp.text = "PP %d/%d" % [slot.pp, m.pp]
+	move_pp.add_theme_color_override("font_color", UI.RED if slot.pp == 0 else UI.TEXT)
+	for c in move_type.get_children():
+		c.queue_free()
+	move_type.add_child(UI.type_badge(m.type, Vector2.ZERO))
 
 
 func _choose_item() -> Dictionary:
@@ -491,6 +503,9 @@ func _use_move(user: Creature, target: Creature, move_id: String, slot_idx: int)
 		var crit := randf() < 0.0625
 		var res := calc_damage(user, target, move_id, crit, randf_range(0.85, 1.0))
 		await _hit_flash(target)
+		var spr_pos: Vector2 = (mine_spr if target == mine else enemy_spr).position
+		var pcol := UI.ACCENT if res.eff > 1.0 else (UI.TEXT_LIGHT if res.eff == 1.0 else Color("b8c4d0"))
+		_popup("-%d" % res.damage, spr_pos + Vector2(-20, -110), pcol)
 		await _animate_hp(target, target.hp - res.damage)
 		await get_tree().create_timer(0.2).timeout
 		if crit:
@@ -669,7 +684,7 @@ func _throw_net() -> bool:
 		return true
 	net_spr.hide()
 	var tw4 := create_tween()
-	tw4.tween_property(enemy_spr, "scale", Vector2(3, 3), 0.2)
+	tw4.tween_property(enemy_spr, "scale", Vector2(2, 2), 0.2)
 	tw4.parallel().tween_property(enemy_spr, "modulate", Color.WHITE, 0.2)
 	await tw4.finished
 	var fails := ["Ah, não! Ele escapou!", "Ah! Parecia que ia pegar!", "Argh! Quase!", "Por pouquinho!"]
@@ -708,7 +723,7 @@ func _animate_hp(c: Creature, new_hp: int) -> void:
 	tw.tween_method(func(v: float):
 		bar.ratio = v / c.stats.hp
 		if c == mine:
-			mine_hp_text.text = "%d/ %d" % [int(round(v)), c.stats.hp], float(from), float(new_hp), dur)
+			mine_hp_text.text = "%d/%d" % [int(round(v)), c.stats.hp], float(from), float(new_hp), dur)
 	await tw.finished
 
 

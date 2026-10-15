@@ -3,7 +3,13 @@
 Jogo 2D no estilo Pokémon, feito em **Godot 4.7**, com **animais brasileiros de verdade**.
 Por enquanto é uma ilha pequena (Ilha Sapê) para explorar, com encontros na grama alta e batalhas por turnos.
 
-Toda a arte é pixel art gerada em código (`scripts/art.gd`), então o projeto não depende de imagens externas.
+Visual em pixel art inspirado em Super Auto Pets: os animais, comidas e itens vêm de um pacote de sprites
+em pixel art (pasta `assets/sap/`), e os animais brasileiros que não existem no pacote (capivara, tatu, quati,
+tucano, sapo e perereca) são desenhados em código no mesmo estilo (`scripts/art.gd`). A fonte pixel art com
+acentos (`scripts/ui/pixel_font.gd`), os painéis, os fundos de batalha e o mapa também são gerados em código.
+
+**Créditos dos sprites:** derivados de Noto Emoji (Google, Apache-2.0), Twemoji (Twitter, CC BY 4.0) e
+FxEmoji (Mozilla, CC BY 4.0), convertidos em pixel art. Detalhes em `assets/sap/FONTES_E_LICENCAS.md`.
 
 ## Como jogar
 
@@ -40,7 +46,9 @@ scripts/main.gd         título -> ilha -> batalhas
 scripts/db.gd           (autoload DB) tipos, golpes, espécies, encontros, itens
 scripts/game.gd         (autoload Game) equipe, mochila, registro, salvamento
 scripts/creature.gd     um animal: status, golpes, EXP
-scripts/art.gd          toda a pixel art (tiles, personagens, animais, casa)
+scripts/art.gd          pixel art: tiles, personagens, sprites dos animais, ícones, painéis, fundos
+scripts/ui/pixel_font.gd fonte bitmap em pixel art
+assets/sap/             sprites do pacote Super Auto Pets (com licenças)
 scripts/island_map.gd   geração do mapa da ilha
 scripts/overworld.gd    exploração, NPCs, grama alta, menu
 scripts/battle.gd       sistema de batalha
@@ -48,7 +56,7 @@ scripts/ui/             caixa de texto, menus, telas de equipe/mochila/registro/
 tools/                  testes automáticos
 ```
 
-Para adicionar um animal: crie a entrada em `DB.SPECIES` (`scripts/db.gd`), desenhe o sprite em `Art.ANIMALS`
+Para adicionar um animal: crie a entrada em `DB.SPECIES` (`scripts/db.gd`), escolha o sprite em `Art.SPECIES_SPRITES`
 (`scripts/art.gd`) e coloque-o em alguma tabela de `DB.ENCOUNTERS`.
 
 ## Testes

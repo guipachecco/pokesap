@@ -78,7 +78,8 @@ func _ready() -> void:
 	msg = MessageBox.new()
 	msg.hide()
 	ui.add_child(msg)
-	start_menu = ChoiceMenu.new(Rect2(352, 6, 122, 128))
+	start_menu = ChoiceMenu.new(Rect2(318, 6, 156, 194))
+	start_menu.row_height = 36
 	start_menu.hide()
 	ui.add_child(start_menu)
 	party_screen = PartyScreen.new()
@@ -387,45 +388,66 @@ func _choose_starter() -> String:
 	var screen := Control.new()
 	UI.fullscreen(screen)
 	var bg := ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.5)
+	bg.color = Color(0.1, 0.07, 0.07, 0.6)
 	UI.fullscreen(bg)
 	screen.add_child(bg)
 	var panels := []
+	var sprites := []
 	for i in 3:
 		var c := Creature.create(ids[i], 5)
-		var p := UI.panel(Rect2(14 + i * 154, 30, 144, 168))
-		var spr := TextureRect.new()
-		spr.texture = Art.animal(ids[i])
-		spr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		spr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		spr.position = Vector2(4, 6)
-		spr.size = Vector2(136, 110)
-		p.add_child(spr)
-		var nl := UI.label(c.display_name(), Vector2(0, 116), 14, UI.TEXT, 144)
+		var p := UI.panel(Rect2(12 + i * 154, 8, 148, 194))
+		var scene := UI.panel(Rect2(6, 6, 136, 132), Color("bfe6f4"), UI.INK)
+		var ground := ColorRect.new()
+		ground.color = Color("8ed46a")
+		ground.position = Vector2(3, 96)
+		ground.size = Vector2(130, 30)
+		scene.add_child(ground)
+		var spr := UI.sprite_rect(Art.animal(ids[i]), Vector2(4, 0), 2, true)
+		scene.add_child(spr)
+		p.add_child(scene)
+		sprites.append(spr)
+		var nl := UI.label(c.display_name(), Vector2(0, 142), UI.NORMAL, UI.TEXT, 148)
 		nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		p.add_child(nl)
-		p.add_child(UI.type_badge(c.type(), Vector2(34, 140)))
+		var badge := UI.type_badge(c.type(), Vector2.ZERO)
+		badge.position = Vector2(floorf((148 - badge.size.x) / 2.0), 160)
+		p.add_child(badge)
 		screen.add_child(p)
 		panels.append(p)
 	ui.add_child(screen)
-	var menu := ChoiceMenu.new(Rect2(14, 206, 452, 34), ["Mico-leão", "Arara-azul", "Jacaré"], 3)
+	var menu := ChoiceMenu.new(Rect2(12, 206, 456, 36), [], 3)
+	menu.button_mode = true
+	menu.row_height = 28
+	menu.set_items(["MICO-LEÃO", "ARARA-AZUL", "JACARÉ"])
 	screen.add_child(menu)
+	var hop: Array = [null]
 	menu.moved.connect(func(i):
 		for j in 3:
-			var st := UI.box_style(Color("fff4e0") if j == i else Color("f8f8f0"), Color("f08030") if j == i else Color("3a4466"))
-			panels[j].add_theme_stylebox_override("panel", st))
+			var sel: bool = j == i
+			panels[j].add_theme_stylebox_override("panel", Art.panel_style(UI.SELECT_BG if sel else UI.CREAM, UI.ACCENT.darkened(0.25) if sel else UI.INK))
+			panels[j].position.y = 8 - (3 if sel else 0)
+			sprites[j].position.y = 0
+		if hop[0]:
+			hop[0].kill()
+		var tw := create_tween().set_loops()
+		tw.tween_property(sprites[i], "position:y", -4.0, 0.15)
+		tw.tween_property(sprites[i], "position:y", 0.0, 0.15)
+		tw.tween_interval(0.3)
+		hop[0] = tw)
 	menu.cancelable = false
 	var chosen := ""
 	while chosen == "":
 		var i := await menu.choose()
 		await msg.say("Escolher o %s?" % DB.SPECIES[ids[i]].name, false)
-		var yn := ChoiceMenu.new(Rect2(380, 168, 90, 70), ["SIM", "NÃO"])
+		var yn := ChoiceMenu.new(Rect2(380, 168, 92, 70), ["SIM", "NÃO"])
 		ui.add_child(yn)
 		var r := await yn.choose()
 		yn.queue_free()
 		msg.hide()
 		if r == 0:
 			chosen = ids[i]
+	if hop[0]:
+		hop[0].kill()
 	screen.queue_free()
 	return chosen
 
@@ -435,6 +457,7 @@ func _choose_starter() -> String:
 func _open_menu() -> void:
 	busy = true
 	var has_party := not Game.party.is_empty()
+	start_menu.icons = [Art.animal(Game.party[0].species, 32) if has_party else Art.icon("equipe"), Art.icon("fruta"), Art.icon("registro"), Art.icon("mel"), null]
 	start_menu.set_items(["EQUIPE", "MOCHILA", "REGISTRO", "SALVAR", "FECHAR"], [has_party, true, true, true, true])
 	while true:
 		var i := await start_menu.choose()

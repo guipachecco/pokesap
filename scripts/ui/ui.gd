@@ -1,10 +1,30 @@
 class_name UI
 extends RefCounted
-## Helpers de interface: estilos, painéis, rótulos e mapeamento de teclas.
+## Identidade visual: paleta, painéis pixelados, textos com fonte bitmap e mapeamento de teclas.
+## Tamanhos de fonte: 11 (pequeno), 22 (normal), 33, 44, 66 (títulos) — sempre escala inteira.
 
-const TEXT := Color("303040")
-const TEXT_LIGHT := Color("f8f8f8")
-const DISABLED := Color("a0a0a8")
+# Paleta (inspirada em Super Auto Pets: creme, marrom-tinta, cores vivas)
+const INK := Color("3b2a2a")
+const CREAM := Color("fff6e0")
+const PAPER := Color("f3e3bf")
+const WOOD := Color("c98a4b")
+const WOOD_DARK := Color("8a5530")
+const ACCENT := Color("f5a524")
+const SELECT_BG := Color("fff0b8")
+const SKY := Color("5ab0f0")
+const RED := Color("e8524a")
+const GREEN := Color("62c24a")
+const BLUE := Color("4a90e8")
+
+const TEXT := INK
+const TEXT_LIGHT := Color("fffaf0")
+const TEXT_MUTED := Color("8a7464")
+const DISABLED := Color("b4a698")
+
+const SMALL := 11
+const NORMAL := 22
+const BIG := 33
+const HUGE := 44
 
 
 static func setup_input() -> void:
@@ -28,19 +48,24 @@ static func setup_input() -> void:
 			InputMap.action_add_event(action, ev)
 
 
-static func box_style(bg := Color("f8f8f0"), border := Color("3a4466")) -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	s.bg_color = bg
-	s.border_color = border
-	s.set_border_width_all(3)
-	s.set_corner_radius_all(5)
-	s.shadow_color = Color(0, 0, 0, 0.25)
-	s.shadow_size = 2
-	s.shadow_offset = Vector2(1, 2)
-	return s
+static func setup_theme() -> void:
+	ThemeDB.fallback_font = PixelFont.get_font()
+	ThemeDB.fallback_font_size = NORMAL
 
 
-static func panel(rect: Rect2, bg := Color("f8f8f0"), border := Color("3a4466")) -> Panel:
+static func font() -> Font:
+	return PixelFont.get_font()
+
+
+static func text_width(text: String, size := NORMAL) -> float:
+	return font().get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+
+
+static func box_style(bg := CREAM, border := INK) -> StyleBox:
+	return Art.panel_style(bg, border)
+
+
+static func panel(rect: Rect2, bg := CREAM, border := INK) -> Panel:
 	var p := Panel.new()
 	p.position = rect.position
 	p.size = rect.size
@@ -48,32 +73,88 @@ static func panel(rect: Rect2, bg := Color("f8f8f0"), border := Color("3a4466"))
 	return p
 
 
-static func label(text: String, pos: Vector2, font_size := 12, color := TEXT, width := 0.0) -> Label:
+static func label(text: String, pos: Vector2, font_size := NORMAL, color := TEXT, width := 0.0) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.position = pos
+	l.add_theme_font_override("font", font())
 	l.add_theme_font_size_override("font_size", font_size)
 	l.add_theme_color_override("font_color", color)
+	l.add_theme_constant_override("line_spacing", 0)
 	if width > 0.0:
 		l.size.x = width
 	return l
 
 
-static func type_badge(type_id: String, pos: Vector2) -> Panel:
+## Texto com sombra de 1 px (para usar sobre fundos coloridos).
+static func shadow_label(text: String, pos: Vector2, font_size := NORMAL, color := TEXT_LIGHT, shadow := INK) -> Label:
+	var l := label(text, pos, font_size, color)
+	var off := maxi(1, font_size / SMALL)
+	l.add_theme_color_override("font_shadow_color", shadow)
+	l.add_theme_constant_override("shadow_offset_x", 0)
+	l.add_theme_constant_override("shadow_offset_y", off)
+	return l
+
+
+## Texto com contorno em pixel (8 cópias deslocadas), para títulos.
+static func outlined_label(text: String, pos: Vector2, font_size: int, color: Color, outline := INK, width := 0.0) -> Control:
+	var holder := Control.new()
+	holder.position = pos
+	var px := maxi(1, font_size / SMALL)
+	for d in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1), Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1), Vector2(0, 2)]:
+		var o := label(text, d * px, font_size, outline, width)
+		if width > 0.0:
+			o.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		holder.add_child(o)
+	var main := label(text, Vector2.ZERO, font_size, color, width)
+	if width > 0.0:
+		main.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	holder.add_child(main)
+	return holder
+
+
+static func sprite_rect(tex: Texture2D, pos: Vector2, scale := 1, flip := false) -> TextureRect:
+	var t := TextureRect.new()
+	t.texture = tex
+	t.position = pos
+	t.size = tex.get_size() * scale
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_SCALE
+	t.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	t.flip_h = flip
+	return t
+
+
+## Selo de tipo: ícone 32 px + faixa colorida com o nome.
+static func type_badge(type_id: String, pos: Vector2) -> Control:
+	var holder := Control.new()
+	holder.position = pos
 	var col: Color = DB.TYPE_COLORS[type_id]
-	var p := panel(Rect2(pos, Vector2(76, 16)), col, col.darkened(0.4))
-	var s: StyleBoxFlat = p.get_theme_stylebox("panel")
-	s.set_border_width_all(1)
-	s.shadow_size = 0
-	var l := label(DB.TYPE_NAMES[type_id].to_upper(), Vector2(0, 0), 9, TEXT_LIGHT, 76)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	l.size.y = 16
-	p.add_child(l)
-	return p
+	var name: String = DB.TYPE_NAMES[type_id].to_upper()
+	var w := text_width(name, SMALL) + 26
+	var strip := panel(Rect2(20, 9, w, 17), col, col.darkened(0.55))
+	var l := shadow_label(name, Vector2(17, 2), SMALL, TEXT_LIGHT, col.darkened(0.55))
+	strip.add_child(l)
+	holder.add_child(strip)
+	holder.add_child(sprite_rect(Art.type_icon(type_id), Vector2(0, 0)))
+	holder.size = Vector2(20 + w, 32)
+	return holder
 
 
 ## Preenche a tela inteira (para telas sobrepostas).
 static func fullscreen(c: Control) -> void:
 	c.position = Vector2.ZERO
 	c.size = Vector2(480, 320)
+
+
+## Fundo de tela com padrão xadrez suave (estilo cardápio de loja).
+static func checker_bg(a: Color, b: Color, cell := 16) -> Control:
+	var c := Control.new()
+	fullscreen(c)
+	c.draw.connect(func():
+		c.draw_rect(Rect2(0, 0, 480, 320), a)
+		for y in range(0, 320, cell):
+			for x in range(0, 480, cell):
+				if (x / cell + y / cell) % 2 == 0:
+					c.draw_rect(Rect2(x, y, cell, cell), b))
+	return c
