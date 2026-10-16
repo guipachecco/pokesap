@@ -9,7 +9,7 @@ extends Control
 
 signal _closed
 
-enum Row { MODE, RES, SCALE, VSYNC, BRIGHT, QUALITY, DETAIL, SHADOWS, ANIM, APPLY, DEFAULTS, BACK }
+enum Row { MODE, RES, SCALE, VSYNC, BRIGHT, QUALITY, DETAIL, SHADOWS, ANIM, CAMERA, APPLY, DEFAULTS, BACK }
 
 const BUTTONS := [Row.APPLY, Row.DEFAULTS, Row.BACK]
 var confirm_seconds := 12.0  # tempo para confirmar antes de desfazer sozinho
@@ -18,7 +18,7 @@ const QUALITY_ORDER := ["baixa", "media", "alta"]
 const LABELS := {
 	Row.MODE: "MODO", Row.RES: "RESOLUÇÃO", Row.SCALE: "ESCALA", Row.VSYNC: "VSYNC",
 	Row.BRIGHT: "BRILHO", Row.QUALITY: "QUALIDADE", Row.DETAIL: "DETALHES",
-	Row.SHADOWS: "SOMBRAS", Row.ANIM: "ANIMAÇÕES",
+	Row.SHADOWS: "SOMBRAS", Row.ANIM: "ANIMAÇÕES", Row.CAMERA: "CÂMERA",
 	Row.APPLY: "APLICAR", Row.DEFAULTS: "PADRÕES", Row.BACK: "VOLTAR",
 }
 
@@ -32,6 +32,7 @@ const HELP := {
 	Row.DETAIL: "Quantidade de flores, tufos, trevos, pedrinhas e conchas espalhados pelo chão.",
 	Row.SHADOWS: "Sombras embaixo das árvores, pedras, casa e personagens.",
 	Row.ANIM: "Água brilhando, grama balançando, borboletas e personagens piscando.",
+	Row.CAMERA: "Distância da câmera no mapa. DISTANTE mostra mais área ao redor, PRÓXIMO aproxima. Os menus e diálogos não mudam.",
 	Row.APPLY: "Aplica o modo de exibição, a resolução, a escala e o VSync.",
 	Row.DEFAULTS: "Volta todas as opções para o padrão.",
 	Row.BACK: "Volta para a tela anterior. Mudanças de exibição não aplicadas são descartadas.",
@@ -72,12 +73,12 @@ func _init() -> void:
 	var right := UI.panel(Rect2(244, 42, 228, 196))
 	add_child(right)
 	_header(right, "QUALIDADE", 6, Color("62c24a"))
-	for i in 4:
-		_option_row(right, [Row.QUALITY, Row.DETAIL, Row.SHADOWS, Row.ANIM][i], 28 + i * 24)
-	var tip := UI.label("Brilho e qualidade mudam na hora.\nExibição muda ao APLICAR.", Vector2(10, 130), UI.SMALL, UI.TEXT_MUTED, 208)
+	for i in 5:
+		_option_row(right, [Row.QUALITY, Row.DETAIL, Row.SHADOWS, Row.ANIM, Row.CAMERA][i], 28 + i * 24)
+	var tip := UI.label("Brilho, qualidade e câmera mudam na hora.\nExibição muda ao APLICAR.", Vector2(10, 152), UI.SMALL, UI.TEXT_MUTED, 208)
 	tip.add_theme_constant_override("line_spacing", 3)
 	right.add_child(tip)
-	_notice = UI.label("", Vector2(10, 166), UI.SMALL, UI.RED, 208)
+	_notice = UI.label("", Vector2(10, 180), UI.SMALL, UI.RED, 208)
 	right.add_child(_notice)
 
 	var help_panel := UI.panel(Rect2(8, 242, 464, 38), UI.PAPER)
@@ -178,6 +179,8 @@ func _value_text(row: int) -> String:
 			return "LIGADAS" if Settings.shadows else "DESLIGADAS"
 		Row.ANIM:
 			return "LIGADAS" if Settings.animations else "DESLIGADAS"
+		Row.CAMERA:
+			return Settings.ZOOM_NAMES[Settings.camera_zoom]
 	return ""
 
 
@@ -219,6 +222,9 @@ func _change(row: int, dir: int) -> void:
 			Settings.set_shadows(not Settings.shadows)
 		Row.ANIM:
 			Settings.set_animations(not Settings.animations)
+		Row.CAMERA:
+			# direita afasta (mais área), esquerda aproxima
+			Settings.set_camera_zoom(wrapi(Settings.camera_zoom - dir - 1, 0, 3) + 1)
 	_refresh()
 
 
@@ -278,7 +284,7 @@ func _pending_differs(row: int) -> bool:
 
 
 func _order() -> Array:
-	return [Row.MODE, Row.RES, Row.SCALE, Row.VSYNC, Row.BRIGHT, Row.QUALITY, Row.DETAIL, Row.SHADOWS, Row.ANIM, Row.APPLY, Row.DEFAULTS, Row.BACK]
+	return [Row.MODE, Row.RES, Row.SCALE, Row.VSYNC, Row.BRIGHT, Row.QUALITY, Row.DETAIL, Row.SHADOWS, Row.ANIM, Row.CAMERA, Row.APPLY, Row.DEFAULTS, Row.BACK]
 
 
 func _process(delta: float) -> void:
@@ -449,7 +455,7 @@ func _step_index(dir: int) -> int:
 	var order := _order()
 	var focused: int = order[index]
 	if focused in BUTTONS:
-		return order.find(Row.ANIM) if dir < 0 else index
+		return order.find(Row.CAMERA) if dir < 0 else index
 	var i := index + dir
 	if i < 0:
 		return order.find(Row.BACK)

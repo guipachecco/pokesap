@@ -416,6 +416,8 @@ func _build_wild() -> void:
 
 ## Aplica as configurações de qualidade (detalhes, sombras, animações).
 func apply_graphics() -> void:
+	# zoom inteiro: pixels continuam nítidos; menor zoom mostra mais área do mapa
+	camera.zoom = Vector2.ONE * Settings.camera_zoom
 	ground.texture = WorldArt.ground(map, Settings.detail)
 	shadows.texture = WorldArt.shadow_layer(map, _static_objects)
 	shadows.visible = Settings.shadows

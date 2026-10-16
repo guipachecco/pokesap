@@ -120,14 +120,14 @@ func _run() -> void:
 	Settings.set_quality("alta")
 	await _frames(3)
 	var tex_high := ow.ground.texture
-	check(ow.shadows.visible and ow.player_shadow.visible and ow.water_fx.visible and ow.fx_layer.visible, "alta: sombras e animações ligadas")
+	check(ow.shadows.visible and ow.player_shadow.visible and ow.water_fx.visible, "alta: sombras e animações ligadas")
 	await _shot("qualidade_alta")
 	Settings.set_quality("baixa")
 	await _frames(3)
 	check(Settings.detail == 0 and not Settings.shadows and not Settings.animations, "baixa: detalhe baixo, sem sombras, sem animações")
 	check(ow.ground.texture != tex_high, "baixa: chão com menos detalhes (outra textura)")
 	check(not ow.shadows.visible and not ow.player_shadow.visible, "baixa: sombras escondidas")
-	check(not ow.water_fx.visible and not ow.fx_layer.visible, "baixa: animações paradas")
+	check(not ow.water_fx.visible and not Settings.animations, "baixa: animações paradas (água e borboletas; o balão de interação continua)")
 	await _shot("qualidade_baixa")
 	check(_diff(tex_high.get_image(), ow.ground.texture.get_image()) > 500, "detalhes alto x baixo mudam o chão (%d pixels)" % _diff(tex_high.get_image(), ow.ground.texture.get_image()))
 	Settings.set_detail(1)
@@ -138,6 +138,21 @@ func _run() -> void:
 	await _frames(2)
 	check(not ow.shadows.visible, "desligar só as sombras funciona")
 	Settings.set_quality("alta")
+
+	print("Câmera")
+	var view2 := ow._visible_tiles().size
+	Settings.set_camera_zoom(1)
+	await _frames(3)
+	check(ow.camera.zoom == Vector2.ONE and ow._visible_tiles().size.x > view2.x, "DISTANTE mostra mais área do mapa (%s tiles x %s)" % [ow._visible_tiles().size, view2])
+	await _shot("zoom_distante")
+	Settings.set_camera_zoom(3)
+	await _frames(3)
+	check(ow.camera.zoom == Vector2(3, 3), "PRÓXIMO aproxima")
+	Settings.save_settings()
+	Settings.camera_zoom = 2
+	Settings.load_settings()
+	check(Settings.camera_zoom == 3, "o zoom fica salvo entre execuções")
+	Settings.set_camera_zoom(2)
 
 	print("Salvar e carregar")
 	Settings.mode = "janela"

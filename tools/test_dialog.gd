@@ -48,13 +48,13 @@ func _ready() -> void:
 	done = [false]
 	var said := []
 	_say_count(["A.", "B.", "C."], done, said)
-	await _frames(30)  # fala curta já terminou de aparecer
+	await _wait(0.4)  # fala curta já terminou de aparecer
 	check(box.waiting and box.label.text == "A.", "primeira fala na tela")
 	_click(box.position + Vector2(100, 30))
-	await _frames(30)
+	await _wait(0.4)
 	check(box.label.text == "B.", "um clique levou para a segunda fala, não pulou a terceira (%s)" % box.label.text)
 	_click(box.position + Vector2(100, 30))
-	await _frames(30)
+	await _wait(0.4)
 	_click(box.position + Vector2(100, 30))
 	await _frames(5)
 	check(done[0], "último clique encerra o diálogo")
@@ -62,7 +62,7 @@ func _ready() -> void:
 	print("Clique fora da caixa não avança")
 	done = [false]
 	_say(["Fala parada."], done)
-	await _frames(30)
+	await _wait(0.4)
 	_click(Vector2(240, 60))
 	await _frames(5)
 	check(box.waiting and not done[0], "clique no cenário (fora da caixa) não avança a fala")

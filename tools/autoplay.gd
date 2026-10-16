@@ -26,12 +26,8 @@ func _ready() -> void:
 	await clear(main.overworld.msg)
 	var ow: Overworld = main.overworld
 	await until(func(): return not ow.busy)
-	# anda até a professora: direita 1, baixo 1, olha para a direita
-	await hold("right", 0.1)
-	await until(func(): return not ow.moving)
-	await hold("down", 0.1)
-	await until(func(): return not ow.moving)
-	await hold("right", 0.05)
+	# vai até a professora (em frente a ela, olhando para a direita)
+	ow.place_player(Vector2i(24, 13), Vector2i.RIGHT)
 	await wait(0.2)
 	await shot("overworld")
 	await tap("ok")
@@ -126,8 +122,7 @@ func _ready() -> void:
 	print("equipe final: ", Game.party.map(func(c): return c.display_name()), " capturados: ", Game.caught.keys())
 
 	# andar pela grama alta
-	ow.player_tile = Vector2i(12, 15)
-	ow.player.position = ow._tile_to_px(ow.player_tile)
+	ow.place_player(Vector2i(12, 15), Vector2i.UP)
 	await hold("up", 0.5)
 	await until(func(): return not ow.moving)
 	await shot("tall_grass")

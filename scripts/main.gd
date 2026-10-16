@@ -12,7 +12,57 @@ func _ready() -> void:
 	fx = CanvasLayer.new()
 	fx.layer = 50
 	add_child(fx)
+	if "--verificar" in OS.get_cmdline_user_args():
+		await _self_check()
+		return
 	await _title()
+
+
+## Pokesap.exe -- --verificar: confere se a versão distribuída tem tudo (spritesheets
+## e animações de todos os animais, regiões, mapas, ícones, fundos) e sai.
+func _self_check() -> void:
+	var problems := []
+	for id in DB.SPECIES:
+		var cs := CreatureSprites.get_set(id)
+		if cs.frames.is_empty() or not cs.meta.anims.has("idle") or not cs.meta.anims.has("front"):
+			problems.append("animações de " + id)
+		if Art.animal(id).get_width() != 64:
+			problems.append("retrato de " + id)
+	for r in Regions.DATA:
+		var m := Regions.map(r)
+		if m.w == 0 or WorldArt.ground(m, 0).get_width() != m.w * 16:
+			problems.append("mapa " + r)
+	for c in DB.CLASSES:
+		if Art.class_icon(c).get_width() != 32:
+			problems.append("ícone " + c)
+	for z in DB.ENCOUNTERS:
+		if Art.battle_bg(z).get_width() != 240:
+			problems.append("fundo " + z)
+	# modos de exibição e zoom de verdade (na janela do executável)
+	if DisplayServer.get_name() != "headless":
+		var before := Settings.snapshot()
+		var win := get_window()
+		for mode in ["tela_cheia", "sem_bordas", "janela"]:
+			Settings.mode = mode
+			Settings.apply_display()
+			for i in 15:
+				await get_tree().process_frame
+			var want: int = {"tela_cheia": Window.MODE_EXCLUSIVE_FULLSCREEN, "sem_bordas": Window.MODE_FULLSCREEN, "janela": Window.MODE_WINDOWED}[mode]
+			if win.mode != want:
+				problems.append("modo " + mode)
+		Game.new_game()
+		var ow := Overworld.new()
+		add_child(ow)
+		for z in [1, 2, 3]:
+			Settings.set_camera_zoom(z)
+			if ow.camera.zoom != Vector2(z, z):
+				problems.append("zoom %d" % z)
+		ow.queue_free()
+		Settings.restore(before)
+		Settings.apply_display()
+		Settings.changed.emit()
+	print("VERIFICACAO: %s" %("OK - %d animais, %d regiões" % [DB.SPECIES.size(), Regions.DATA.size()] if problems.is_empty() else "FALHOU: " + ", ".join(PackedStringArray(problems))))
+	get_tree().quit(0 if problems.is_empty() else 1)
 
 
 ## Tela inicial. CONTINUAR só aparece habilitado com um save válido; se o

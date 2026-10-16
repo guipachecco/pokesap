@@ -1,15 +1,17 @@
 extends Node
-## Tira capturas de tela da ilha em vários pontos (precisa de janela, não headless).
-## godot --path . tools/world_shots.tscn -- <pasta_de_saida>
+## Tira capturas de tela das regiões em vários pontos e nos 3 zooms de câmera
+## (precisa de janela, não headless). godot --path . tools/world_shots.tscn -- <pasta>
 
-const SPOTS := {
-	"casa": Vector2i(23, 13),
-	"campo": Vector2i(12, 16),
-	"brejo": Vector2i(17, 23),
-	"praia": Vector2i(40, 20),
-	"bosque": Vector2i(34, 14),
-	"sul": Vector2i(23, 29),
-}
+const SPOTS := [
+	["ilha", "casa", Vector2i(23, 13)],
+	["ilha", "campo", Vector2i(12, 16)],
+	["ilha", "brejo", Vector2i(17, 23)],
+	["ilha", "praia", Vector2i(40, 20)],
+	["ilha", "cais", Vector2i(23, 30)],
+	["manguezal", "mangue_cais", Vector2i(7, 24)],
+	["manguezal", "mangue_cabana", Vector2i(20, 19)],
+	["manguezal", "mangue_passarela", Vector2i(20, 10)],
+]
 
 var out_dir := "user://world_shots"
 
@@ -23,29 +25,30 @@ func _ready() -> void:
 	UI.setup_theme()
 	Game.new_game()
 	Game.add_creature(Creature.create("mico", 5))
+	Game.flags["starter"] = true
+	Game.flags["registro_ok"] = true
+	Game.campfires["ilha:casa"] = true
 	var t0 := Time.get_ticks_msec()
 	var ow := Overworld.new()
 	ow.encounters_enabled = false
 	add_child(ow)
 	print("ilha montada em %d ms" % (Time.get_ticks_msec() - t0))
 	ow.busy = true
-	for name in SPOTS:
-		var p: Vector2i = SPOTS[name]
-		ow.player_tile = p
-		ow.player.position = ow._tile_to_px(p)
+	for s in SPOTS:
+		if ow.region_id != s[0]:
+			t0 = Time.get_ticks_msec()
+			ow.load_region(s[0], s[2])
+			print("%s montado em %d ms" % [s[0], Time.get_ticks_msec() - t0])
+		ow.place_player(s[2], Vector2i.DOWN)
 		ow.camera.reset_smoothing()
 		await get_tree().create_timer(0.3).timeout
-		await _shot(name)
-	# caminhada na diagonal (quadros da animação)
-	ow.busy = false
-	ow.player_tile = SPOTS.casa + Vector2i(-2, 3)
-	ow.player.position = ow._tile_to_px(ow.player_tile)
-	Input.action_press("right")
-	Input.action_press("down")
-	await get_tree().create_timer(0.12).timeout
-	await _shot("andando")
-	Input.action_release("right")
-	Input.action_release("down")
+		await _shot(s[1])
+	ow.load_region("ilha", Vector2i(23, 14))
+	for z in [1, 3]:
+		Settings.set_camera_zoom(z)
+		await get_tree().create_timer(0.3).timeout
+		await _shot("zoom_%d" % z)
+	Settings.set_camera_zoom(2)
 	get_tree().quit()
 
 

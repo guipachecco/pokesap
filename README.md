@@ -26,7 +26,12 @@ FxEmoji (Mozilla, CC BY 4.0), convertidos em pixel art. Detalhes em `assets/sap/
 
 Fale com a Professora Ipê ao lado da sua casa para escolher o primeiro animal. Entre em casa para curar a equipe.
 
-Os menus também funcionam com o mouse (passar por cima seleciona, clicar confirma).
+Os menus também funcionam com o mouse (passar por cima seleciona, clicar confirma). Nos diálogos, clicar na caixa de
+texto mostra a fala inteira e o clique seguinte passa para a próxima.
+
+O movimento é contínuo: o personagem anda enquanto a tecla está apertada e para assim que ela é solta (as
+diagonais andam na mesma velocidade). Ao lado de algo com que dá para interagir aparece um balão "!" e a dica
+"Z: FALAR", "Z: DESCANSAR"... no canto da tela.
 
 ## Configurações gráficas
 
@@ -43,6 +48,7 @@ Na tela de título (**CONFIGURAÇÕES**) ou no menu do jogo (**OPÇÕES**):
 | Detalhes | Quantidade de flores, tufos, trevos, pedrinhas e conchas no chão |
 | Sombras | Sombras de árvores, pedras, casa e personagens |
 | Animações | Brilho da água, grama balançando, borboletas e personagens piscando |
+| Câmera | Distância da câmera no mapa: Distante (mostra mais área), Normal ou Próximo. Os menus não mudam |
 
 Brilho e qualidade mudam na hora. Modo, resolução, escala e VSync mudam ao apertar **APLICAR**, e o jogo
 pergunta se quer manter: sem resposta em 12 segundos, volta sozinho para a configuração anterior.
@@ -92,6 +98,37 @@ impacto e recuperação. O dano só é aplicado no quadro de impacto (ou quando 
 rig em `CreatureRigs` (registre em `build` e em `POINTS`) e rode `tools/bake_creatures.tscn`. Também dá para usar uma
 spritesheet desenhada à mão no mesmo formato, sem rig. Depois coloque-o em alguma tabela de `DB.ENCOUNTERS`.
 
+## Modo história
+
+Você chega à Ilha Sapê para ajudar a Professora Ipê a registrar os animais. Depois do registro de campo, o brejo e a
+praia se abrem; o pescador manda você ao Manguezal do Uçá, onde o Velho Papo-Amarelo, um jacaré enorme, bloqueia a
+passarela para a Trilha da Serra (a próxima região, em breve). Há missões principais e secundárias (menu > MISSÕES).
+
+- **Regiões** (`scripts/regions.gd`): Ilha Sapê (gerada em código) e Manguezal do Uçá (pintado por operações de
+  dados), cada uma com casas, NPCs, placas, fogueiras, áreas de encontro, animais andando, eventos e saídas.
+- **Roteiro** (`scripts/story.gd`): missões, falas de cada NPC com condições e scripts de eventos, tudo em dados;
+  `scripts/story_runner.gd` executa.
+- **Fogueiras**: acendem na primeira visita, curam a equipe, viram ponto de retorno se você perder e perguntam se
+  quer salvar. Nada é salvo sem confirmar.
+- **Save** (`scripts/game.gd`): versionado, escrito num arquivo temporário e conferido antes de substituir o anterior,
+  que vira cópia de segurança (.bak). Arquivos estragados ou inválidos são recusados com uma mensagem; saves antigos
+  são convertidos. Ao carregar, o jogador nunca aparece dentro de um obstáculo.
+- **Tela inicial**: CONTINUAR (desabilitado sem save válido, mostra região, animal e tempo), NOVO JOGO (pede
+  confirmação se já houver aventura salva; o save antigo só é trocado quando você salvar de novo), CONFIGURAÇÕES e SAIR.
+
+## Versão para Windows
+
+```
+powershell -ExecutionPolicy Bypass -File tools\build_windows.ps1
+```
+
+Gera `build/windows/` (Pokesap.exe, Pokesap.pck, instalar.bat, desinstalar.ps1, LEIA-ME.txt) e
+`dist/Pokesap-windows.zip`, e no fim abre o executável em modo de verificação (`Pokesap.exe -- --verificar`), que confere
+spritesheets, regiões, ícones, fundos, os três modos de tela e o zoom da câmera. Para jogar, abra `Pokesap.exe`; para
+instalar com atalhos, rode `instalar.bat`. Sem os export templates do Godot instalados, o script usa o executável do
+próprio Godot renomeado (ele abre sozinho o .pck de mesmo nome); com os templates (Editor > Gerenciar Modelos de
+Exportação), gera um executável de release, menor e sem o "(DEBUG)" no título.
+
 ## Estrutura
 
 ```
@@ -126,6 +163,8 @@ tools/                  testes automáticos
 godot --headless --path . tools/test_logic.tscn
 godot --headless --path . tools/test_movement.tscn
 godot --headless --path . tools/test_combat.tscn
+godot --headless --path . tools/test_dialog.tscn
+godot --headless --path . tools/test_story.tscn
 godot --path . tools/battle_shots.tscn -- <pasta_para_capturas>
 godot --path . tools/test_settings.tscn -- <pasta_para_capturas>
 godot --path . tools/world_shots.tscn -- <pasta_para_capturas>
@@ -135,8 +174,12 @@ godot --path . tools/autoplay.tscn -- <pasta_para_capturas>
 - `test_logic`: dados (classes, elementos, efeitos, habilidades, golpes), dano, cadeia alimentar, captura, EXP,
   salvamento e se o mapa é todo alcançável.
 - `test_combat`: efeitos no fim do turno, atordoar, prender, escudo, recarga, retaliação e empurrão com as animações rodando.
+- `test_dialog`: clique e teclado nos diálogos (revelar, avançar uma fala por clique, clique fora da caixa, escolhas).
+- `test_story`: abertura, inicial, fogueiras, salvar duas vezes, carregar, save estragado, antigo e fora do mapa,
+  viagem ao manguezal e chefe. Guarda e devolve o save de quem está jogando.
 - `battle_shots`: roda 23 golpes entre pares de animais e salva folhas com os quadros de cada golpe.
-- `test_movement`: as 8 direções, velocidade igual na diagonal e na reta, teclas opostas, quinas, colisões e soltar as teclas.
+- `test_movement`: resposta no primeiro quadro, parada ao soltar, 8 direções, diagonal na mesma velocidade, taxa de
+  quadros, teclas opostas, colisões com deslizamento, diálogo aberto e perda de foco.
 - `test_settings`: cada modo de exibição, resolução, escala, VSync, brilho (mede a imagem), qualidade, salvar/carregar,
   arquivo inválido e a tela de configurações pelo teclado. Guarda e devolve as configurações de quem está jogando.
 - `world_shots`: capturas da ilha em vários pontos. `autoplay`: joga sozinho (escolhe o inicial, luta, captura).

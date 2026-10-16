@@ -16,6 +16,7 @@ const PRESETS := {
 	"alta": {"detail": 2, "shadows": true, "animations": true},
 }
 const DETAIL_NAMES := ["BAIXO", "MÉDIO", "ALTO"]
+const ZOOM_NAMES := {1: "DISTANTE", 2: "NORMAL", 3: "PRÓXIMO"}
 const MIN_BRIGHTNESS := 0.5
 const MAX_BRIGHTNESS := 1.5
 const DEFAULTS := {
@@ -27,6 +28,7 @@ const DEFAULTS := {
 	"detail": 2,             # detalhes do cenário: 0 baixo, 1 médio, 2 alto
 	"shadows": true,
 	"animations": true,      # água, grama balançando, borboletas, piscar
+	"camera_zoom": 2,        # zoom da câmera no mapa: 1 distante, 2 normal, 3 próximo
 }
 
 var mode: String = DEFAULTS.mode
@@ -37,6 +39,7 @@ var brightness: float = DEFAULTS.brightness
 var detail: int = DEFAULTS.detail
 var shadows: bool = DEFAULTS.shadows
 var animations: bool = DEFAULTS.animations
+var camera_zoom: int = DEFAULTS.camera_zoom
 
 var _bright_layer: CanvasLayer
 var _bright_rect: ColorRect
@@ -174,7 +177,7 @@ func apply_display() -> void:
 
 func snapshot() -> Dictionary:
 	return {"mode": mode, "scale": scale, "pixel_perfect": pixel_perfect, "vsync": vsync,
-		"brightness": brightness, "detail": detail, "shadows": shadows, "animations": animations}
+		"brightness": brightness, "detail": detail, "shadows": shadows, "animations": animations, "camera_zoom": camera_zoom}
 
 
 func restore(d: Dictionary) -> void:
@@ -186,6 +189,7 @@ func restore(d: Dictionary) -> void:
 	detail = d.get("detail", DEFAULTS.detail)
 	shadows = d.get("shadows", DEFAULTS.shadows)
 	animations = d.get("animations", DEFAULTS.animations)
+	camera_zoom = d.get("camera_zoom", DEFAULTS.camera_zoom)
 	_validate()
 
 
@@ -203,6 +207,7 @@ func save_settings() -> bool:
 	cfg.set_value("qualidade", "detalhes", detail)
 	cfg.set_value("qualidade", "sombras", shadows)
 	cfg.set_value("qualidade", "animacoes", animations)
+	cfg.set_value("jogo", "zoom_camera", camera_zoom)
 	return cfg.save(PATH) == OK
 
 
@@ -221,6 +226,7 @@ func load_settings() -> void:
 	detail = _to_int(cfg.get_value("qualidade", "detalhes", DEFAULTS.detail), DEFAULTS.detail)
 	shadows = _to_bool(cfg.get_value("qualidade", "sombras", DEFAULTS.shadows), DEFAULTS.shadows)
 	animations = _to_bool(cfg.get_value("qualidade", "animacoes", DEFAULTS.animations), DEFAULTS.animations)
+	camera_zoom = _to_int(cfg.get_value("jogo", "zoom_camera", DEFAULTS.camera_zoom), DEFAULTS.camera_zoom)
 	_validate()
 
 
@@ -231,6 +237,8 @@ func _validate() -> void:
 		scale = DEFAULTS.scale
 	if is_nan(brightness) or brightness < MIN_BRIGHTNESS or brightness > MAX_BRIGHTNESS:
 		brightness = DEFAULTS.brightness
+	if not ZOOM_NAMES.has(camera_zoom):
+		camera_zoom = DEFAULTS.camera_zoom
 	if detail < 0 or detail > 2:
 		detail = DEFAULTS.detail
 
@@ -241,3 +249,12 @@ func _to_int(v, fallback: int) -> int:
 
 func _to_bool(v, fallback: bool) -> bool:
 	return v if typeof(v) == TYPE_BOOL else fallback
+
+
+# ---------------------------------------------------------------- câmera
+
+## Zoom da câmera no mapa (inteiro, para os pixels continuarem nítidos):
+## 1 mostra a maior área, 3 a menor. A interface não muda.
+func set_camera_zoom(z: int) -> void:
+	camera_zoom = clampi(z, 1, 3)
+	changed.emit()
