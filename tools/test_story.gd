@@ -7,7 +7,6 @@ extends Node
 
 var fails := 0
 var ow: Overworld
-var _backup := {}
 
 
 func check(cond: bool, what: String) -> void:
@@ -21,18 +20,9 @@ func check(cond: bool, what: String) -> void:
 func _ready() -> void:
 	UI.setup_input()
 	UI.setup_theme()
-	for p in [Game.SAVE_PATH, Game.SAVE_PATH + ".bak"]:
-		if FileAccess.file_exists(p):
-			_backup[p] = FileAccess.get_file_as_string(p)
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+	SaveGuard.stash()  # o save de quem está jogando fica guardado no disco
 	await _run()
-	for p in [Game.SAVE_PATH, Game.SAVE_PATH + ".bak"]:
-		if FileAccess.file_exists(p):
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
-		if _backup.has(p):
-			var f := FileAccess.open(p, FileAccess.WRITE)
-			f.store_string(_backup[p])
-			f.close()
+	SaveGuard.finish()
 	print("\n%s (%d falhas)" % ["TUDO OK" if fails == 0 else "FALHOU", fails])
 	get_tree().quit(1 if fails else 0)
 
@@ -111,6 +101,7 @@ func _run() -> void:
 
 	print("Manguezal e chefe")
 	Game.flags["barco_liberado"] = true
+	Game.add_item("carteira", 1)
 	Game.start_quest("travessia")
 	Game.party[0].level = 15
 	await _wait_free(func(): await ow.change_region("manguezal", "cais"))
@@ -122,7 +113,11 @@ func _run() -> void:
 		ow.on_battle_finished("win", opts))
 	ow.place_player(Vector2i(20, 7), Vector2i.UP)
 	await _wait_free(func(): await ow._interact())
-	check(Game.flags.get("velho_vencido", false) and Game.quest_state("velho") == "done", "vencer o chefe libera a passarela")
+	check(Game.flags.get("velho_vencido", false), "vencer o chefe libera a passarela")
+	ow.place_player(Vector2i(21, 19), Vector2i.UP)
+	await _wait_free(func(): await ow._interact())
+	await _wait_free(func(): await ow._interact())
+	check(Game.quest_state("velho") == "done" and Game.quest_state("serra") == "active", "a Iara conclui a missão do Velho e pede o nível 6 para a serra")
 	check(not ow.map.npcs.has("velho"), "o Velho sai da passarela")
 	ow.place_player(Vector2i(23, 21), Vector2i.UP)
 	await _wait_free(func(): await ow._interact())

@@ -1,6 +1,7 @@
 extends Node
 ## Testa a caixa de diálogo com mouse e teclado: o 1º clique mostra o texto inteiro,
-## o 2º avança; um clique avança só uma fala; clicar numa opção escolhe só ela.
+## o 2º avança; um clique avança só uma fala; clicar em qualquer parte da tela (fora da
+## caixa) também avança, sem apertar o que está atrás; clicar numa opção escolhe só ela.
 ## godot --headless --path . tools/test_dialog.tscn
 
 var fails := 0
@@ -59,15 +60,47 @@ func _ready() -> void:
 	await _frames(5)
 	check(done[0], "último clique encerra o diálogo")
 
-	print("Clique fora da caixa não avança")
+	print("Clique em qualquer parte da tela avança")
 	done = [false]
-	_say(["Fala parada."], done)
-	await _wait(0.4)
+	_say(["Fala longa fora da caixa: aparece letra por letra para testar o clique no cenário.", "Depois."], done)
+	await _frames(3)
+	# um botão atrás do clique: não pode ser apertado junto (um clique, uma ação)
+	var behind := Button.new()
+	behind.position = Vector2(200, 40)
+	behind.size = Vector2(80, 40)
+	var pressed := [0]
+	behind.pressed.connect(func(): pressed[0] += 1)
+	box.get_parent().add_child(behind)
+	box.get_parent().move_child(behind, 0)
 	_click(Vector2(240, 60))
+	await _wait(0.05)
+	check(not box.typing and box.waiting and box.label.text.begins_with("Fala longa"), "1º clique fora da caixa mostra a fala inteira")
+	_click(Vector2(240, 60))
+	await _wait(0.4)
+	check(box.label.text == "Depois.", "2º clique fora da caixa avança (%s)" % box.label.text)
+	check(pressed[0] == 0, "o clique que avançou a fala não apertou o botão que estava atrás")
+	_click(Vector2(60, 120))
 	await _frames(5)
-	check(box.waiting and not done[0], "clique no cenário (fora da caixa) não avança a fala")
+	check(done[0], "clique fora da caixa na última fala encerra o diálogo")
+	behind.queue_free()
+
+	print("Clique num menu não avança a fala")
+	done = [false]
+	_say(["Fala com menu na tela."], done)
+	await _wait(0.9)
+	var res := [-2]
+	var m2 := ChoiceMenu.new(Rect2(380, 100, 92, 70), ["SIM", "NÃO"])
+	box.get_parent().add_child(m2)
+	_ask(m2, res)
+	await _frames(3)
+	var c2: Control = m2._cells[1]
+	_click(m2.position + c2.position + c2.size / 2.0)
+	await _frames(5)
+	check(res[0] == 1 and box.waiting and not done[0], "clicar na opção escolhe a opção e não passa a fala (%d, esperando=%s, fim=%s)" % [res[0], box.waiting, done[0]])
+	m2.queue_free()
 	await _tap("ok")
 	await _frames(3)
+	check(done[0], "teclado continua funcionando")
 
 	print("Escolhas")
 	var result := [-2]
@@ -76,10 +109,10 @@ func _ready() -> void:
 	done = [false]
 	_ask(menu, result)
 	await _frames(3)
-	var cell: Control = menu.get_child(1)
+	var cell: Control = menu._cells[0]
 	_click(menu.position + cell.position + cell.size / 2.0 + Vector2(0, 0))
 	await _frames(3)
-	var other: Control = menu.get_child(2)
+	var other: Control = menu._cells[1]
 	_click(menu.position + other.position + other.size / 2.0)
 	await _frames(3)
 	check(result[0] == 0 or result[0] == 1, "clicar numa opção escolhe a opção (%d)" % result[0])

@@ -1,5 +1,6 @@
 extends Node
 ## Joga automaticamente e tira capturas de tela (precisa de janela, não headless).
+## Guarda o save de quem está jogando antes e devolve no fim.
 ## godot --path . tools/autoplay.tscn -- <pasta_de_saida>
 
 var out_dir := "user://shots"
@@ -12,8 +13,7 @@ func _ready() -> void:
 	if args.size() > 0:
 		out_dir = args[0]
 	DirAccess.make_dir_recursive_absolute(out_dir)
-	if FileAccess.file_exists("user://pokesap_save.json"):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path("user://pokesap_save.json"))
+	SaveGuard.stash()  # o save de quem está jogando fica guardado no disco e volta no fim
 	main = load("res://scenes/main.tscn").instantiate()
 	add_child(main)
 	seed(42)
@@ -72,6 +72,7 @@ func _ready() -> void:
 	# batalha: luta até o fim sempre com o 1º golpe
 	ow._start_encounter("campo")
 	await until(func(): return _battle() != null)
+	await wait(1.6)  # o animal selvagem entra andando antes da primeira fala
 	await clear(_battle().msg)
 	await until(func(): return _battle().action_menu.active)
 	await shot("battle_menu")
@@ -89,6 +90,7 @@ func _ready() -> void:
 			if n % 10 == 3:
 				await shot("battle_%02d" % n)
 			await tap("ok", 1, 0.25)
+	await clear(ow.msg)  # falas depois da batalha (avisos, volta para casa se perder)
 	await until(func(): return not ow.busy)
 	await shot("after_battle")
 	print("após batalha: ", Game.party.map(func(c): return "%s nv%d exp%d" % [c.display_name(), c.level, c.exp]))
@@ -98,6 +100,7 @@ func _ready() -> void:
 	Game.add_item("rede", 10)
 	ow._start_encounter("brejo")
 	await until(func(): return _battle() != null)
+	await wait(1.6)  # o animal selvagem entra andando antes da primeira fala
 	await clear(_battle().msg)
 	n = 0
 	var bag_shot := false
@@ -117,6 +120,7 @@ func _ready() -> void:
 			await shot("net_%02d" % n)
 		else:
 			await tap("ok", 1, 0.25)
+	await clear(ow.msg)
 	await until(func(): return not ow.busy)
 	await shot("after_capture")
 	print("equipe final: ", Game.party.map(func(c): return c.display_name()), " capturados: ", Game.caught.keys())
@@ -126,7 +130,18 @@ func _ready() -> void:
 	await hold("up", 0.5)
 	await until(func(): return not ow.moving)
 	await shot("tall_grass")
+	_finish()
+
+
+func _finish() -> void:
+	SaveGuard.finish()
 	get_tree().quit()
+
+
+## Fechar a janela no meio também devolve o save.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_finish()
 
 
 ## O cursor do mouse (de quem está usando o PC) não deve escolher itens dos menus.
@@ -148,7 +163,8 @@ func until(cond: Callable, timeout := 8.0) -> void:
 		await get_tree().process_frame
 		t += get_process_delta_time()
 	if t >= timeout:
-		print("TIMEOUT esperando condição")
+		var ow: Overworld = main.overworld
+		print("TIMEOUT esperando condição (ocupado=%s, menu=%s, fala=%s, historia=%d, batalha=%s, equipe=%s, telas=%s)" % [ow.busy if ow else "-", ow.start_menu.active if ow else "-", ow.msg.visible if ow else "-", ow._in_story if ow else -1, ow.in_battle if ow else "-", ow.party_screen.visible if ow else "-", ow.ui.get_children().filter(func(c): return c.visible).map(func(c): return c.get_class() + ":" + str(c.name))])
 
 
 ## Avança mensagens até a caixa parar de esperar.
@@ -157,6 +173,8 @@ func clear(box: MessageBox, limit := 40) -> void:
 	for i in limit:
 		if box == null or not is_instance_valid(box):
 			return
+		if ChoiceMenu._open.any(func(m): return is_instance_valid(m) and m.active and m.is_visible_in_tree()):
+			return  # um menu está esperando escolha: quem escolhe é o roteiro
 		if not (box.typing or box.waiting):
 			await wait(0.3)
 			if not is_instance_valid(box) or not (box.typing or box.waiting):

@@ -27,6 +27,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	ow.busy = false
 	var free := _find(func(p): return _area_free(p, 3))
+	await _frames(10)  # deixa passar os primeiros quadros (carregamento) antes de medir
 
 	print("Resposta imediata (teclado de verdade)")
 	ow.place_player(free)
