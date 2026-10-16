@@ -125,18 +125,32 @@ static func sprite_rect(tex: Texture2D, pos: Vector2, scale := 1, flip := false)
 	return t
 
 
-## Selo de tipo: ícone 32 px + faixa colorida com o nome.
+## Selo da classe biológica: ícone 32 px + faixa colorida com o nome.
+static func class_badge(class_id: String, pos: Vector2) -> Control:
+	var c: Dictionary = DB.CLASSES[class_id]
+	return _badge(Art.class_icon(class_id), c.name.to_upper(), c.color, pos)
+
+
+## Selo do elemento de um golpe.
+static func element_badge(element_id: String, pos: Vector2) -> Control:
+	var e: Dictionary = DB.ELEMENTS[element_id]
+	return _badge(Art.element_icon(element_id), e.name.to_upper(), e.color, pos)
+
+
+## Mantido por compatibilidade: o "tipo" de um animal é a sua classe.
 static func type_badge(type_id: String, pos: Vector2) -> Control:
+	return class_badge(type_id, pos)
+
+
+static func _badge(icon: Texture2D, text: String, col: Color, pos: Vector2) -> Control:
 	var holder := Control.new()
 	holder.position = pos
-	var col: Color = DB.TYPE_COLORS[type_id]
-	var name: String = DB.TYPE_NAMES[type_id].to_upper()
-	var w := text_width(name, SMALL) + 26
+	var w := text_width(text, SMALL) + 26
 	var strip := panel(Rect2(20, 9, w, 17), col, col.darkened(0.55))
-	var l := shadow_label(name, Vector2(17, 2), SMALL, TEXT_LIGHT, col.darkened(0.55))
+	var l := shadow_label(text, Vector2(17, 2), SMALL, TEXT_LIGHT, col.darkened(0.55))
 	strip.add_child(l)
 	holder.add_child(strip)
-	holder.add_child(sprite_rect(Art.type_icon(type_id), Vector2(0, 0)))
+	holder.add_child(sprite_rect(icon, Vector2(0, 0)))
 	holder.size = Vector2(20 + w, 32)
 	return holder
 

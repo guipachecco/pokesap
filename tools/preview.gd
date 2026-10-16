@@ -14,7 +14,7 @@ func _ready() -> void:
 		sheet.blend_rect(img, Rect2i(0, 0, 128, 128), Vector2i((i % 7) * 136 + 4, (i / 7) * 136 + 4))
 		i += 1
 	var x := 4
-	for t in DB.TYPE_NAMES:
+	for t in DB.CLASSES:
 		var img: Image = Art.type_icon(t).get_image()
 		img.resize(64, 64, Image.INTERPOLATE_NEAREST)
 		sheet.blend_rect(img, Rect2i(0, 0, 64, 64), Vector2i(x, 280))

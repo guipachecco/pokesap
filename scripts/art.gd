@@ -227,15 +227,35 @@ const SPECIES_SPRITES := {
 	"perereca": {"vector": "perereca"},
 }
 
-## Ícones de tipo (32 px).
-const TYPE_ICONS := {
-	"normal": {"vector": "pata"},
+## Ícones das classes biológicas (32 px).
+const CLASS_ICONS := {
 	"mamifero": {"sap": "dog"},
 	"ave": {"sap": "bluebird"},
 	"reptil": {"sap": "turtle"},
 	"anfibio": {"vector": "perereca"},
-	"aquatico": {"sap": "fish"},
+	"peixe": {"sap": "fish"},
 	"inseto": {"sap": "ladybug"},
+	"aracnideo": {"vector": "aranha"},
+	"crustaceo": {"sap": "crab"},
+	"molusco": {"vector": "polvo"},
+	"anelideo": {"vector": "minhoca"},
+	"cnidario": {"vector": "agua_viva"},
+	"prehistorico": {"vector": "dino"},
+	"fantastico": {"vector": "estrela"},
+}
+
+## Ícones dos elementos dos golpes (32 px).
+const ELEMENT_ICONS := {
+	"fisico": {"vector": "impacto"},
+	"agua": {"vector": "gota"},
+	"ar": {"vector": "vento"},
+	"terra": {"vector": "rocha"},
+	"planta": {"vector": "folha"},
+	"veneno": {"vector": "gota_veneno"},
+	"fogo": {"vector": "chama"},
+	"eletrico": {"vector": "raio"},
+	"gelo": {"vector": "floco"},
+	"especial": {"vector": "estrela"},
 }
 
 ## Ícones de itens e menus.
@@ -258,16 +278,29 @@ const ICONS := {
 
 
 static func has_animal(species: String) -> bool:
-	return SPECIES_SPRITES.has(species)
+	return CreatureSprites.has_sprites(species) or SPECIES_SPRITES.has(species)
 
 
-## Sprite do animal (64 ou 32 px), virado para a esquerda.
+## Sprite do animal (64 ou 32 px), virado para a esquerda. Usa o retrato da
+## spritesheet da criatura; espécies sem spritesheet usam o sprite antigo.
 static func animal(species: String, size := 64) -> Texture2D:
-	return _cached("animal_%s_%d" % [species, size], func(): return _tex(_spec_image(SPECIES_SPRITES[species], size, "animals")))
+	return _cached("animal_%s_%d" % [species, size], func():
+		if CreatureSprites.has_sprites(species):
+			return CreatureSprites.portrait(species, size)
+		return _tex(_spec_image(SPECIES_SPRITES[species], size, "animals")))
 
 
+static func class_icon(class_id: String) -> Texture2D:
+	return _cached("class_" + class_id, func(): return _tex(_spec_image(CLASS_ICONS[class_id], 32, "animals")))
+
+
+static func element_icon(element_id: String, size := 32) -> Texture2D:
+	return _cached("element_%s_%d" % [element_id, size], func(): return _tex(_spec_image(ELEMENT_ICONS[element_id], size, "animals")))
+
+
+## Mantido por compatibilidade: o "tipo" agora é a classe biológica.
 static func type_icon(type_id: String) -> Texture2D:
-	return _cached("type_" + type_id, func(): return _tex(_spec_image(TYPE_ICONS[type_id], 32, "animals")))
+	return class_icon(type_id)
 
 
 static func icon(id: String, size := 32) -> Texture2D:
@@ -417,6 +450,54 @@ const VECTOR_ART := {
 	"pata": [
 		["e", 32, 44, 13, 11, "c9b98a"],
 		["c", 16, 27, 6, "c9b98a"], ["c", 26, 18, 6, "c9b98a"], ["c", 38, 18, 6, "c9b98a"], ["c", 48, 27, 6, "c9b98a"],
+	],
+	# classes
+	"aranha": [
+		["l", 22, 30, 4, 14, 2.4, "4a3020"], ["l", 22, 34, 2, 30, 2.4, "4a3020"], ["l", 22, 38, 4, 50, 2.4, "4a3020"], ["l", 24, 42, 10, 60, 2.4, "4a3020"],
+		["l", 42, 30, 60, 14, 2.4, "4a3020"], ["l", 42, 34, 62, 30, 2.4, "4a3020"], ["l", 42, 38, 60, 50, 2.4, "4a3020"], ["l", 40, 42, 54, 60, 2.4, "4a3020"],
+		["e", 32, 44, 13, 12, "6a4a30"], ["e", 32, 28, 9, 8, "5a3a24"],
+		["c", 28, 25, 1.8, "f0e0c0"], ["c", 36, 25, 1.8, "f0e0c0"],
+	],
+	"polvo": [
+		["l", 20, 40, 8, 58, 4, "d06a8a"], ["l", 28, 42, 22, 60, 4, "d06a8a"], ["l", 36, 42, 42, 60, 4, "d06a8a"], ["l", 44, 40, 56, 58, 4, "d06a8a"],
+		["e", 32, 28, 17, 18, "e07a9a"], ["e", 26, 22, 5, 4, "f0a8c0"],
+		["c", 25, 32, 3, "ffffff"], ["c", 39, 32, 3, "ffffff"], ["c", 25, 33, 1.6, "1a1a1a"], ["c", 39, 33, 1.6, "1a1a1a"],
+	],
+	"minhoca": [
+		["l", 8, 46, 20, 34, 6, "c07a7a"], ["l", 20, 34, 34, 42, 6, "c07a7a"], ["l", 34, 42, 46, 30, 6, "c07a7a"], ["l", 46, 30, 56, 20, 6, "d08a8a"],
+		["r", 30, 36, 8, 10, "e0a0a0"], ["c", 56, 19, 1.5, "1a1a1a"],
+	],
+	"agua_viva": [
+		["l", 20, 34, 16, 60, 1.6, "c070d0"], ["l", 28, 36, 28, 62, 1.6, "c070d0"], ["l", 36, 36, 38, 62, 1.6, "c070d0"], ["l", 44, 34, 48, 60, 1.6, "c070d0"],
+		["e", 32, 28, 22, 16, "e8a0f0"], ["x", 0, 30, 64, 34], ["e", 32, 30, 22, 4, "d080e0"], ["e", 26, 20, 7, 4, "f8d8ff"],
+	],
+	"dino": [
+		["l", 44, 40, 62, 50, 6, "6a8a4a"], ["e", 34, 40, 15, 11, "7a9a54"], ["l", 26, 34, 14, 10, 5, "7a9a54"], ["e", 12, 9, 7, 5, "7a9a54"],
+		["r", 24, 46, 6, 14, "6a8a4a"], ["r", 38, 46, 6, 14, "6a8a4a"], ["c", 10, 7, 1.4, "1a1a1a"],
+	],
+	"estrela": [
+		["p", [32, 4, 39, 23, 60, 24, 43, 37, 50, 58, 32, 46, 14, 58, 21, 37, 4, 24, 25, 23], "f0c0f0"],
+		["p", [32, 14, 36, 26, 48, 27, 38, 34, 42, 46, 32, 39, 22, 46, 26, 34, 16, 27, 28, 26], "fff0ff"],
+	],
+	# elementos
+	"impacto": [
+		["p", [32, 2, 38, 22, 58, 12, 44, 30, 62, 40, 40, 40, 44, 62, 30, 44, 12, 58, 20, 38, 2, 30, 22, 24, 10, 6, 28, 18], "f0a040"],
+		["p", [32, 14, 36, 26, 46, 22, 40, 32, 48, 38, 36, 38, 38, 48, 30, 40, 20, 46, 25, 36, 16, 30, 27, 26, 22, 16, 30, 24], "fff0a0"],
+	],
+	"gota": [["c", 32, 40, 16, "3f8fe8"], ["p", [32, 4, 48, 34, 16, 34], "3f8fe8"], ["e", 25, 38, 4, 7, "a8d8ff"]],
+	"gota_veneno": [["c", 30, 40, 15, "9a50c0"], ["p", [30, 6, 45, 34, 15, 34], "9a50c0"], ["e", 24, 38, 4, 6, "d8a8f0"], ["c", 50, 18, 5, "b878d8"], ["c", 54, 32, 3, "b878d8"]],
+	"vento": [
+		["l", 6, 20, 40, 20, 3, "8ad0e0"], ["l", 40, 20, 48, 14, 3, "8ad0e0"], ["l", 12, 34, 52, 34, 3, "a8e0f0"], ["l", 52, 34, 58, 26, 3, "a8e0f0"],
+		["l", 6, 48, 34, 48, 3, "8ad0e0"], ["l", 34, 48, 42, 54, 3, "8ad0e0"],
+	],
+	"rocha": [["p", [8, 50, 16, 24, 34, 12, 54, 22, 58, 48, 40, 58, 18, 58], "a08050"], ["p", [16, 26, 34, 14, 44, 20, 30, 30], "c8a878"], ["l", 30, 30, 40, 50, 1.4, "6a5030"]],
+	"folha": [["p", [8, 56, 14, 30, 30, 12, 56, 6, 50, 30, 36, 48], "5ab84a"], ["l", 10, 54, 46, 16, 1.6, "3a8a30"], ["p", [14, 30, 30, 12, 40, 12, 22, 30], "8ad870"]],
+	"chama": [["p", [32, 2, 46, 24, 52, 44, 42, 60, 22, 60, 12, 44, 18, 24, 26, 30], "f06a30"], ["p", [32, 22, 40, 38, 40, 52, 32, 58, 24, 52, 24, 40], "f8c840"]],
+	"raio": [["p", [38, 2, 14, 36, 30, 36, 22, 62, 50, 24, 34, 24, 44, 2], "f0c020"], ["p", [38, 8, 24, 32, 32, 32], "fff0a0"]],
+	"floco": [
+		["l", 32, 4, 32, 60, 2.6, "8ae0f0"], ["l", 8, 18, 56, 46, 2.6, "8ae0f0"], ["l", 8, 46, 56, 18, 2.6, "8ae0f0"],
+		["l", 32, 14, 26, 8, 1.6, "c8f4ff"], ["l", 32, 14, 38, 8, 1.6, "c8f4ff"], ["l", 32, 50, 26, 56, 1.6, "c8f4ff"], ["l", 32, 50, 38, 56, 1.6, "c8f4ff"],
+		["c", 32, 32, 5, "e0faff"],
 	],
 	"engrenagem": [
 		["r", 27, 4, 10, 12, "8a94a4"], ["r", 27, 48, 10, 12, "8a94a4"],

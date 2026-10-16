@@ -91,7 +91,7 @@ func _refresh() -> void:
 		_sprite.modulate = Color.WHITE
 		_name.text = sp.name
 		_desc.text = sp.dex
-		_badge_holder.add_child(UI.type_badge(sp.type, Vector2.ZERO))
+		_badge_holder.add_child(UI.class_badge(sp.class, Vector2.ZERO))
 	else:
 		_sprite.modulate = Color(0.15, 0.1, 0.12, 0.6)
 		_name.text = "???"

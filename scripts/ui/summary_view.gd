@@ -11,7 +11,7 @@ var _t := 0.0
 
 func _init(c: Creature) -> void:
 	UI.fullscreen(self)
-	var tcol: Color = DB.TYPE_COLORS[c.type()]
+	var tcol: Color = DB.CLASSES[c.klass()].color
 	add_child(UI.checker_bg(Color("f3e3bf"), Color("ecd9b0")))
 	var top := ColorRect.new()
 	top.color = tcol
@@ -39,7 +39,10 @@ func _init(c: Creature) -> void:
 	_spr = UI.sprite_rect(Art.animal(c.species), Vector2(12, 6), 2, true)
 	frame.add_child(_spr)
 	add_child(frame)
-	add_child(UI.type_badge(c.type(), Vector2(14, 202)))
+	add_child(UI.class_badge(c.klass(), Vector2(14, 202)))
+	# afinidades (elementos naturais do animal)
+	for i in c.affinities().size():
+		add_child(UI.sprite_rect(Art.element_icon(c.affinities()[i], 16), Vector2(14 + i * 18, 234)))
 
 	# atributos
 	var info := UI.panel(Rect2(166, 44, 306, 96))
@@ -69,7 +72,8 @@ func _init(c: Creature) -> void:
 		var m: Dictionary = DB.MOVES[c.moves[i].id]
 		var x := 6 + (i % 2) * 150
 		var y := 6 + (i / 2) * 31
-		var chip := UI.panel(Rect2(x, y, 144, 28), DB.TYPE_COLORS[m.type].lightened(0.55), DB.TYPE_COLORS[m.type].darkened(0.45))
+		var ecol: Color = DB.ELEMENTS[m.element].color
+		var chip := UI.panel(Rect2(x, y, 144, 28), ecol.lightened(0.55), ecol.darkened(0.45))
 		chip.add_child(UI.label(m.name, Vector2(6, 2), UI.SMALL))
 		var pw := "--" if m.power == 0 else str(m.power)
 		chip.add_child(UI.label("POD %s  PP %d/%d" % [pw, c.moves[i].pp, m.pp], Vector2(6, 15), UI.SMALL, UI.TEXT_MUTED))
@@ -81,10 +85,11 @@ func _init(c: Creature) -> void:
 	dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	dl.size = Vector2(444, 46)
 	dl.add_theme_constant_override("line_spacing", 3)
-	dl.text = c.data().dex
+	var names := c.passives().map(func(p): return DB.PASSIVES[p].name)
+	dl.text = "HABILIDADES: %s\n%s" % [", ".join(PackedStringArray(names)), c.data().dex]
 	desc.add_child(dl)
 	add_child(desc)
-	add_child(UI.label("X: VOLTAR", Vector2(18, 238), UI.SMALL, UI.TEXT_MUTED))
+	add_child(UI.label("X: VOLTAR", Vector2(420, 302), UI.SMALL, UI.TEXT_MUTED))
 
 
 func _process(delta: float) -> void:

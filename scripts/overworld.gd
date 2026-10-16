@@ -609,7 +609,7 @@ func _choose_starter() -> String:
 		var nl := UI.label(c.display_name(), Vector2(0, 142), UI.NORMAL, UI.TEXT, 148)
 		nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		p.add_child(nl)
-		var badge := UI.type_badge(c.type(), Vector2.ZERO)
+		var badge := UI.class_badge(c.klass(), Vector2.ZERO)
 		badge.position = Vector2(floorf((148 - badge.size.x) / 2.0), 160)
 		p.add_child(badge)
 		screen.add_child(p)

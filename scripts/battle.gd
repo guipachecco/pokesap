@@ -1,6 +1,9 @@
 class_name Battle
 extends CanvasLayer
-## Batalha por turnos contra um animal selvagem: golpes, tipos, captura, troca, EXP.
+## Batalha por turnos contra um animal selvagem: golpes com elementos, classes
+## biológicas, efeitos de estado, habilidades passivas, recarga, captura, troca e EXP.
+## As criaturas são CreatureView: cada golpe toca a animação da espécie, e o dano só é
+## aplicado no quadro de impacto (ou quando o projétil chega ao alvo).
 
 signal finished(result: String)  # "win", "lose", "run", "caught"
 
@@ -12,21 +15,26 @@ var mine: Creature
 var zone := "campo"
 var participants: Array[Creature] = []
 var run_attempts := 0
+var _attacked := {}      # quem já deu o primeiro golpe de dano (Emboscada)
+var _acted := {}         # quem já agiu neste turno (Empurrão)
+var _stun_guard := {}    # turnos de imunidade a atordoar
 
 var bg: TextureRect
+var fx: BattleFX
 var enemy_icon: TextureRect
 var mine_icon: TextureRect
-var _t := 0.0
-var enemy_spr: Sprite2D
-var mine_spr: Sprite2D
+var enemy_spr: CreatureView
+var mine_spr: CreatureView
 var enemy_box: Panel
 var mine_box: Panel
 var enemy_name: Label
 var enemy_lvl: Label
 var enemy_bar: HPBar
+var enemy_status: HBoxContainer
 var mine_name: Label
 var mine_lvl: Label
 var mine_bar: HPBar
+var mine_status: HBoxContainer
 var mine_hp_text: Label
 var mine_exp: HPBar
 var msg: MessageBox
@@ -35,6 +43,7 @@ var move_menu: ChoiceMenu
 var move_info: Panel
 var move_pp: Label
 var move_type: Control
+var move_kind: Label
 var party_screen: PartyScreen
 var bag_screen: BagScreen
 var net_spr: Sprite2D
@@ -42,17 +51,27 @@ var net_spr: Sprite2D
 
 # ---------------------------------------------------------------- cálculos (estáticos, testáveis)
 
-static func calc_damage(user: Creature, target: Creature, move_id: String, crit: bool, roll: float) -> Dictionary:
+## Dano de um golpe. bonus: multiplicador extra (ex.: Emboscada).
+static func calc_damage(user: Creature, target: Creature, move_id: String, crit: bool, roll: float, bonus := 1.0) -> Dictionary:
 	var m: Dictionary = DB.MOVES[move_id]
-	var eff := DB.effectiveness(m.type, target.type())
+	var eff := DB.effectiveness(move_id, user.klass(), target.klass())
+	if eff == 0.0:
+		return {"damage": 0, "eff": 0.0}
 	var atk := user.stat_in_battle("atk")
 	var def := target.stat_in_battle("def")
 	if crit:
 		atk = maxf(atk, user.stats.atk)
 		def = minf(def, target.stats.def)
 	var base: float = ((2.0 * user.level / 5.0 + 2.0) * m.power * atk / def) / 50.0 + 2.0
-	var stab := 1.5 if m.type == user.type() else 1.0
-	var dmg: float = base * stab * eff * (1.5 if crit else 1.0) * roll
+	var stab := 1.5 if m.element in user.affinities() else 1.0
+	var mult := bonus
+	if m.get("contact", false):
+		for id in user.statuses:
+			mult *= DB.STATUSES[id].get("contact_mult", 1.0)
+	var low := user.has_passive("low_hp_power")
+	if not low.is_empty() and float(user.hp) / user.stats.hp <= low.threshold:
+		mult *= low.mult
+	var dmg: float = base * stab * eff * (1.5 if crit else 1.0) * roll * mult
 	return {"damage": maxi(1, int(dmg)), "eff": eff}
 
 
@@ -66,6 +85,34 @@ static func exp_reward(defeated: Creature) -> int:
 	return maxi(1, int(defeated.data().exp * defeated.level / 7.0))
 
 
+## Duração de um efeito aplicado por attacker em target, com as habilidades dos dois.
+static func status_turns(target: Creature, id: String, attacker: Creature) -> int:
+	var st: Dictionary = DB.STATUSES[id]
+	var turns: int = st.turns
+	if turns <= 0:
+		return 0
+	var tp := target.has_passive("neg_status_turns")
+	if st.kind == "neg" and not tp.is_empty():
+		turns += tp.delta
+	if attacker:
+		var ap := attacker.has_passive("status_turns_bonus")
+		if not ap.is_empty() and id in ap.ids:
+			turns += ap.delta
+	return maxi(1, turns)
+
+
+## Pode receber o efeito? (imunidades e efeitos de perder a vez não se acumulam)
+static func can_receive(target: Creature, id: String) -> bool:
+	var imm := target.has_passive("immune_status")
+	if not imm.is_empty() and id in imm.ids:
+		return false
+	if DB.STATUSES[id].get("skip", false):
+		for other in target.statuses:
+			if other != id and DB.STATUSES[other].get("skip", false):
+				return false
+	return true
+
+
 # ---------------------------------------------------------------- montagem
 
 func _ready() -> void:
@@ -76,24 +123,21 @@ func _ready() -> void:
 	UI.fullscreen(bg)
 	add_child(bg)
 
-	enemy_spr = Sprite2D.new()
-	enemy_spr.scale = Vector2(2, 2)
-	enemy_spr.offset = Vector2(0, -32)
+	enemy_spr = CreatureView.new()
 	add_child(enemy_spr)
-	mine_spr = Sprite2D.new()
-	mine_spr.scale = Vector2(2, 2)
-	mine_spr.offset = Vector2(0, -32)
-	mine_spr.flip_h = true
+	mine_spr = CreatureView.new()
 	add_child(mine_spr)
 	net_spr = Sprite2D.new()
 	net_spr.texture = Art.icon("rede")
 	net_spr.scale = Vector2(2, 2)
 	net_spr.hide()
 	add_child(net_spr)
+	fx = BattleFX.new()
+	add_child(fx)
 
 	# cartão do inimigo
-	enemy_box = UI.panel(Rect2(10, 10, 214, 54))
-	enemy_icon = UI.sprite_rect(Art.type_icon("normal"), Vector2(4, 11))
+	enemy_box = UI.panel(Rect2(10, 10, 214, 56))
+	enemy_icon = UI.sprite_rect(Art.class_icon("mamifero"), Vector2(4, 11))
 	enemy_box.add_child(enemy_icon)
 	enemy_name = UI.label("", Vector2(40, 4), UI.NORMAL)
 	enemy_box.add_child(enemy_name)
@@ -106,11 +150,13 @@ func _ready() -> void:
 	enemy_bar.position = Vector2(50, 33)
 	enemy_bar.size = Vector2(156, 8)
 	enemy_box.add_child(enemy_bar)
+	enemy_status = _status_row(Vector2(50, 43))
+	enemy_box.add_child(enemy_status)
 	add_child(enemy_box)
 
 	# cartão do jogador
 	mine_box = UI.panel(Rect2(256, 158, 218, 80))
-	mine_icon = UI.sprite_rect(Art.type_icon("normal"), Vector2(4, 8))
+	mine_icon = UI.sprite_rect(Art.class_icon("mamifero"), Vector2(4, 8))
 	mine_box.add_child(mine_icon)
 	mine_name = UI.label("", Vector2(40, 4), UI.NORMAL)
 	mine_box.add_child(mine_name)
@@ -126,6 +172,8 @@ func _ready() -> void:
 	mine_hp_text = UI.label("", Vector2(110, 42), UI.NORMAL, UI.TEXT, 100)
 	mine_hp_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	mine_box.add_child(mine_hp_text)
+	mine_status = _status_row(Vector2(8, 45))
+	mine_box.add_child(mine_status)
 	mine_box.add_child(UI.label("EXP", Vector2(8, 61), UI.SMALL, UI.BLUE))
 	mine_exp = HPBar.new()
 	mine_exp.exp_mode = true
@@ -151,10 +199,12 @@ func _ready() -> void:
 	move_menu.moved.connect(_on_move_hover)
 	add_child(move_menu)
 	move_info = UI.panel(Rect2(330, 244, 146, 72))
-	move_pp = UI.label("", Vector2(10, 6), UI.NORMAL)
+	move_pp = UI.label("", Vector2(10, 4), UI.NORMAL)
+	move_kind = UI.label("", Vector2(10, 25), UI.SMALL, UI.TEXT_MUTED)
 	move_type = Control.new()
-	move_type.position = Vector2(8, 32)
+	move_type.position = Vector2(8, 37)
 	move_info.add_child(move_pp)
+	move_info.add_child(move_kind)
 	move_info.add_child(move_type)
 	move_info.hide()
 	add_child(move_info)
@@ -167,11 +217,26 @@ func _ready() -> void:
 	add_child(bag_screen)
 
 
-## Respiração dos sprites (1 px, sem borrar os pixels).
-func _process(delta: float) -> void:
-	_t += delta
-	enemy_spr.offset.y = -32 - (1 if fmod(_t, 1.0) < 0.5 else 0)
-	mine_spr.offset.y = -32 - (1 if fmod(_t + 0.5, 1.0) < 0.5 else 0)
+func _status_row(pos: Vector2) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.position = pos
+	row.add_theme_constant_override("separation", 2)
+	return row
+
+
+## Selinhos dos efeitos ativos (VEN, LEN, ESC...) no cartão.
+func _refresh_status(c: Creature) -> void:
+	var row := mine_status if c == mine else enemy_status
+	for ch in row.get_children():
+		ch.queue_free()
+	for id in c.statuses:
+		var st: Dictionary = DB.STATUSES[id]
+		var chip := UI.panel(Rect2(0, 0, 28, 13), st.color, st.color.darkened(0.55))
+		chip.custom_minimum_size = Vector2(28, 13)
+		var l := UI.shadow_label(st.short, Vector2(4, 1), UI.SMALL, UI.TEXT_LIGHT, st.color.darkened(0.6))
+		chip.add_child(l)
+		row.add_child(chip)
+	_view(c).set_statuses(c.statuses)
 
 
 ## Número de dano que sobe e some.
@@ -188,7 +253,7 @@ func _refresh_enemy_box() -> void:
 	enemy_name.text = enemy.display_name()
 	enemy_lvl.text = "Nv%d" % enemy.level
 	enemy_bar.ratio = float(enemy.hp) / enemy.stats.hp
-	enemy_icon.texture = Art.type_icon(enemy.type())
+	enemy_icon.texture = Art.class_icon(enemy.klass())
 
 
 func _refresh_mine_box() -> void:
@@ -197,30 +262,47 @@ func _refresh_mine_box() -> void:
 	mine_bar.ratio = float(mine.hp) / mine.stats.hp
 	mine_hp_text.text = "%d/%d" % [mine.hp, mine.stats.hp]
 	mine_exp.ratio = mine.exp_fraction()
-	mine_icon.texture = Art.type_icon(mine.type())
+	mine_icon.texture = Art.class_icon(mine.klass())
+	_refresh_status(mine)
+
+
+func _view(c: Creature) -> CreatureView:
+	return mine_spr if c == mine else enemy_spr
 
 
 # ---------------------------------------------------------------- fluxo principal
 
-func start(wild: Creature, zone_id: String) -> void:
+## Monta a cena da batalha (sem a entrada animada nem o laço de turnos).
+func prepare(wild: Creature, zone_id: String) -> void:
 	enemy = wild
 	zone = zone_id
 	bg.texture = Art.battle_bg(zone)
 	Game.seen[enemy.species] = true
 	mine = Game.first_able()
 	participants = [mine]
-	enemy_spr.texture = Art.animal(enemy.species)
-	mine_spr.texture = Art.animal(mine.species)
+	enemy.reset_stages()
+	mine.reset_stages()
+	enemy_spr.set_species(enemy.species)
+	mine_spr.set_species(mine.species, true)
+	enemy_spr.position = ENEMY_POS
+	mine_spr.position = PLAYER_POS
 	_refresh_enemy_box()
 	_refresh_mine_box()
+
+
+func start(wild: Creature, zone_id: String) -> void:
+	prepare(wild, zone_id)
 	enemy_box.hide()
 	mine_box.hide()
 	mine_spr.hide()
 
-	enemy_spr.position = ENEMY_POS + Vector2(-480, 0)
+	# o animal selvagem entra andando pela direita
+	enemy_spr.position = ENEMY_POS + Vector2(240, 0)
+	enemy_spr.play("walk")
 	var tw := create_tween()
-	tw.tween_property(enemy_spr, "position", ENEMY_POS, 0.6).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(enemy_spr, "position", ENEMY_POS, 0.9)
 	await tw.finished
+	enemy_spr.play("idle")
 	enemy_box.show()
 	await msg.say("%s selvagem apareceu!" % enemy.display_name())
 	await _send_out(mine)
@@ -231,24 +313,29 @@ func _send_out(c: Creature) -> void:
 	mine = c
 	if not participants.has(c):
 		participants.append(c)
-	mine_spr.texture = Art.animal(c.species)
+	c.reset_stages()
+	mine_spr.set_species(c.species, true)
 	mine_spr.modulate = Color.WHITE
+	mine_spr.scale = Vector2(2, 2)
 	_refresh_mine_box()
 	await msg.say("Vai, %s!" % c.display_name(), false)
 	mine_spr.show()
 	mine_spr.position = PLAYER_POS + Vector2(-200, 0)
-	mine_spr.scale = Vector2(2, 2)
+	mine_spr.play("walk")
 	var tw := create_tween()
-	tw.tween_property(mine_spr, "position", PLAYER_POS, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(mine_spr, "position", PLAYER_POS, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	await tw.finished
+	mine_spr.play("idle")
 	mine_box.show()
-	await get_tree().create_timer(0.3).timeout
+	await get_tree().create_timer(0.25).timeout
 
 
 func _battle_loop() -> void:
 	while true:
 		var action := await _choose_action()
 		var result := await _run_turn(action)
+		if result == "":
+			result = await _end_of_turn()
 		if result != "":
 			await _end(result)
 			return
@@ -272,29 +359,50 @@ func _choose_action() -> Dictionary:
 				if not it.is_empty():
 					return it
 			2:
+				if _trapped(mine):
+					await msg.say("%s está preso e não pode sair!" % mine.display_name())
+					continue
 				var sw := await _choose_switch(false)
 				if sw >= 0:
 					return {"kind": "switch", "idx": sw}
 			3:
+				if _trapped(mine):
+					await msg.say("%s está preso e não dá para fugir!" % mine.display_name())
+					continue
 				return {"kind": "run"}
 	return {}
+
+
+func _trapped(c: Creature) -> bool:
+	for id in c.statuses:
+		if DB.STATUSES[id].get("trap", false):
+			return true
+	return false
+
+
+func _move_usable(c: Creature, slot: Dictionary) -> bool:
+	return slot.pp > 0 and not c.cooldowns.has(slot.id)
 
 
 func _choose_move() -> int:
 	var names := []
 	var en := []
-	var any_pp := false
+	var any_ok := false
 	for m in mine.moves:
-		names.append(DB.MOVES[m.id].name)
-		en.append(m.pp > 0)
-		any_pp = any_pp or m.pp > 0
-	if not any_pp:
+		var nm: String = DB.MOVES[m.id].name
+		if mine.cooldowns.has(m.id):
+			nm += " (%d)" % mine.cooldowns[m.id]
+		names.append(nm)
+		var ok := _move_usable(mine, m)
+		en.append(ok)
+		any_ok = any_ok or ok
+	if not any_ok:
 		await msg.say("%s não tem mais golpes!" % mine.display_name())
 		return 99  # Esforço
 	msg.hide()
 	var tints := []
 	for m in mine.moves:
-		tints.append(DB.TYPE_COLORS[DB.MOVES[m.id].type].lightened(0.6))
+		tints.append(DB.ELEMENTS[DB.MOVES[m.id].element].color.lightened(0.6))
 	move_menu.tints = tints
 	move_menu.set_items(names, en)
 	move_info.show()
@@ -312,9 +420,13 @@ func _on_move_hover(i: int) -> void:
 	var m: Dictionary = DB.MOVES[slot.id]
 	move_pp.text = "PP %d/%d" % [slot.pp, m.pp]
 	move_pp.add_theme_color_override("font_color", UI.RED if slot.pp == 0 else UI.TEXT)
+	if mine.cooldowns.has(slot.id):
+		move_kind.text = "RECARGA %d" % mine.cooldowns[slot.id]
+	else:
+		move_kind.text = "CONTATO" if m.get("contact", false) else ("DISTÂNCIA" if m.power > 0 else "EFEITO")
 	for c in move_type.get_children():
 		c.queue_free()
-	move_type.add_child(UI.type_badge(m.type, Vector2.ZERO))
+	move_type.add_child(UI.element_badge(m.element, Vector2.ZERO))
 
 
 func _choose_item() -> Dictionary:
@@ -375,12 +487,19 @@ func _party_msg(text: String) -> void:
 
 ## Executa um turno. Retorna "" para continuar ou o resultado da batalha.
 func _run_turn(action: Dictionary) -> String:
+	_acted = {}
 	var enemy_move := _enemy_pick_move()
 	match action.kind:
 		"run":
 			run_attempts += 1
 			if _try_run():
-				await msg.say("Você fugiu em segurança!")
+				await msg.say("Você fugiu em segurança!", false)
+				# o animal vira e sai correndo
+				mine_spr.set_species(mine.species, false)
+				mine_spr.play("walk")
+				var tw := create_tween()
+				tw.tween_property(mine_spr, "position", PLAYER_POS + Vector2(-260, 0), 0.5)
+				await tw.finished
 				return "run"
 			await msg.say("Não conseguiu fugir!")
 		"switch":
@@ -402,6 +521,7 @@ func _run_turn(action: Dictionary) -> String:
 				Game.use_item(action.id)
 				var healed := mini(item.heal, c.stats.hp - c.hp)
 				if c == mine:
+					fx.glow(mine_spr.point_global("center"), Color("a8f080"))
 					await _animate_hp(mine, c.hp + healed)
 				else:
 					c.hp += healed
@@ -417,16 +537,43 @@ func _run_turn(action: Dictionary) -> String:
 				var target: Creature = step[1]
 				if user.is_fainted() or target.is_fainted():
 					continue
-				await _use_move(user, target, step[2], step[3])
+				if await _can_act(user):
+					await _use_move(user, target, step[2], step[3])
+				_acted[user] = true
 				var r := await _check_faints()
 				if r != "":
 					return r
 			return ""
 	# Ações que não são golpes: o inimigo ataca depois.
-	if not enemy.is_fainted():
+	if not enemy.is_fainted() and await _can_act(enemy):
 		await _use_move(enemy, mine, enemy_move, -1)
 		return await _check_faints()
 	return ""
+
+
+## Atordoado, congelado ou empurrado perdem a ação.
+func _can_act(c: Creature) -> bool:
+	if c.statuses.has("empurrao"):
+		c.statuses.erase("empurrao")
+		_refresh_status(c)
+		await msg.say("%s perdeu o equilíbrio e não conseguiu agir!" % _who(c))
+		return false
+	if c.statuses.has("atordoado"):
+		c.statuses.erase("atordoado")
+		_stun_guard[c] = 2
+		_refresh_status(c)
+		await _view(c).flash(DB.STATUSES.atordoado.color)
+		await msg.say("%s está atordoado e não consegue agir!" % _who(c))
+		return false
+	if c.statuses.has("congelado"):
+		if randf() < DB.STATUSES.congelado.thaw:
+			c.statuses.erase("congelado")
+			_refresh_status(c)
+			await msg.say(DB.STATUSES.congelado.end % _who(c))
+			return true
+		await msg.say("%s está congelado!" % _who(c))
+		return false
+	return true
 
 
 func _goes_first(my_move: String, enemy_move: String) -> bool:
@@ -454,14 +601,20 @@ func _enemy_pick_move() -> String:
 	var options := []
 	var weights := []
 	for m in enemy.moves:
-		if m.pp <= 0:
+		if not _move_usable(enemy, m):
 			continue
 		var mv: Dictionary = DB.MOVES[m.id]
 		var w := 1.0
 		if mv.power > 0:
-			w = 1.0 + DB.effectiveness(mv.type, mine.type() if mine else "normal")
+			w = 1.0 + DB.effectiveness(m.id, enemy.klass(), mine.klass() if mine else "mamifero")
 		else:
 			w = 0.6
+			# não repete efeito que o alvo (ou ele mesmo) já tem
+			var st: Dictionary = mv.get("status", {})
+			if not st.is_empty():
+				var who := enemy if st.get("target", "foe") == "self" else mine
+				if who and who.statuses.has(st.id):
+					w = 0.1
 		options.append(m.id)
 		weights.append(w)
 	if options.is_empty():
@@ -481,6 +634,28 @@ func _who(c: Creature) -> String:
 	return c.display_name() if c == mine else "%s selvagem" % c.display_name()
 
 
+# ---------------------------------------------------------------- golpes
+
+## Toca a animação em segundo plano e marca quando terminar.
+func _run_anim(v: CreatureView, anim: String, target_pos: Vector2, contact: bool, done: Array) -> void:
+	await v.play(anim, target_pos, contact)
+	done[0] = true
+
+
+## Espera o quadro de impacto da animação (ou o fim, se ela não tiver impacto).
+func _await_impact(v: CreatureView, anim: String, target_pos: Vector2, contact: bool) -> Array:
+	var hit := [false]
+	var done := [false]
+	var cb := func(): hit[0] = true
+	v.impact.connect(cb, CONNECT_ONE_SHOT)
+	_run_anim(v, anim, target_pos, contact, done)
+	while not hit[0] and not done[0]:
+		await get_tree().process_frame
+	if v.impact.is_connected(cb):
+		v.impact.disconnect(cb)
+	return done
+
+
 func _use_move(user: Creature, target: Creature, move_id: String, slot_idx: int) -> void:
 	var m: Dictionary = DB.MOVES[move_id]
 	if user == enemy:
@@ -490,60 +665,247 @@ func _use_move(user: Creature, target: Creature, move_id: String, slot_idx: int)
 				break
 	elif slot_idx >= 0 and slot_idx < user.moves.size():
 		user.moves[slot_idx].pp -= 1
+	if m.has("cooldown"):
+		user.cooldowns[move_id] = int(m.cooldown) + 1
 	await msg.say("%s usou %s!" % [_who(user), m.name], false)
-	await _lunge(user)
+	var uv := _view(user)
+	var tv := _view(target)
+	var contact: bool = m.get("contact", false)
+	var st: Dictionary = m.get("status", {})
+	var self_move: bool = m.power == 0 and ((m.has("effect") and m.effect[0] == "self") or st.get("target", "") == "self")
+	var anim: String = m.get("anim", "tackle")
+	if self_move:
+		anim = "buff"
+	if not uv.has_anim(anim):
+		anim = "tackle" if contact else "shoot"
+
+	# acerto ou erro é decidido antes, para o alvo poder desviar na hora certa
 	var acc: float = m.acc
 	var s: int = user.stages.acc
 	acc *= (3.0 + s) / 3.0 if s >= 0 else 3.0 / (3.0 - s)
-	var self_target: bool = m.has("effect") and m.effect[0] == "self" and m.power == 0
-	if not self_target and randf() * 100.0 >= acc:
-		await msg.say("Mas errou!")
+	var missed: bool = not self_move and randf() * 100.0 >= acc
+	var dodged := false
+	var dg := target.has_passive("dodge_contact")
+	if not missed and contact and not dg.is_empty() and randf() * 100.0 < dg.chance:
+		missed = true
+		dodged = true
+
+	var target_pos := tv.point_global("center")
+	var anim_done := await _await_impact(uv, anim, target_pos, contact)
+
+	if self_move:
+		fx.glow(uv.point_global("center"))
+		await _apply_secondary(user, user, m, true)
+		await _wait_anim(anim_done)
 		return
+
+	# golpes à distância: o projétil sai da boca e viaja até o alvo
+	var vfx: String = m.get("vfx", "")
+	if not contact:
+		if anim == "roar" and vfx == "":
+			fx.waves(uv.point_global("mouth"), 0.0 if user == mine else PI)
+		if vfx != "":
+			await fx.shoot(vfx, uv.point_global("mouth"), target_pos)
+
+	if missed:
+		tv.play("dodge")
+		await msg.say("%s desviou!" % _who(target) if dodged else "Mas errou!")
+		await _wait_anim(anim_done)
+		return
+
 	if m.power > 0:
-		var crit := randf() < 0.0625
-		var res := calc_damage(user, target, move_id, crit, randf_range(0.85, 1.0))
-		await _hit_flash(target)
-		var spr_pos: Vector2 = (mine_spr if target == mine else enemy_spr).position
-		var pcol := UI.ACCENT if res.eff > 1.0 else (UI.TEXT_LIGHT if res.eff == 1.0 else Color("b8c4d0"))
-		_popup("-%d" % res.damage, spr_pos + Vector2(-20, -110), pcol)
-		await _animate_hp(target, target.hp - res.damage)
-		await get_tree().create_timer(0.2).timeout
+		var ci := target.has_passive("crit_immune")
+		var crit := ci.is_empty() and randf() < 0.0625
+		var bonus := 1.0
+		var fa := user.has_passive("first_attack_bonus")
+		if not fa.is_empty() and not _attacked.has(user):
+			bonus = fa.mult
+		_attacked[user] = true
+		var res := calc_damage(user, target, move_id, crit, randf_range(0.85, 1.0), bonus)
+		if res.eff == 0.0:
+			await msg.say("Não afeta %s..." % _who(target))
+			await _wait_anim(anim_done)
+			return
+		var dmg: int = res.damage
+		# escudo absorve primeiro
+		if target.statuses.has("escudo"):
+			var sh: Dictionary = target.statuses.escudo
+			var absorbed := mini(dmg, int(sh.hp))
+			sh.hp -= absorbed
+			dmg -= absorbed
+			if sh.hp <= 0:
+				target.statuses.erase("escudo")
+				_refresh_status(target)
+				_popup("ESCUDO!", tv.position + Vector2(-40, -120), Color("a0c8f0"))
+		fx.burst(target_pos, m.element, 18 if res.eff >= 1.5 or crit else 12)
+		if res.eff >= 1.5 or crit:
+			fx.shake(self, 0.25)
+		tv.play("hit")
+		tv.flash()
+		var pcol := UI.ACCENT if res.eff >= 1.5 else (UI.TEXT_LIGHT if res.eff > 0.67 else Color("b8c4d0"))
+		_popup("-%d" % dmg if dmg > 0 else "0", tv.position + Vector2(-20, -110), pcol)
+		await _animate_hp(target, target.hp - dmg)
+		await _wait_anim(anim_done)
+		await get_tree().create_timer(0.15).timeout
 		if crit:
 			await msg.say("Um golpe crítico!")
-		if res.eff > 1.0:
+		if res.eff >= 1.5:
 			await msg.say("É super eficaz!")
-		elif res.eff < 1.0:
+		elif res.eff <= 0.67:
 			await msg.say("Não é muito eficaz...")
 		if m.has("recoil"):
 			var rec := maxi(1, int(res.damage * m.recoil))
 			await _animate_hp(user, user.hp - rec)
 			await msg.say("%s se machucou com o esforço!" % _who(user))
-		if m.has("effect") and not target.is_fainted() and randf() * 100.0 < m.get("chance", 100):
-			await _apply_stage(target if m.effect[0] == "foe" else user, m.effect[1], m.effect[2])
-	elif m.has("effect"):
-		await _apply_stage(target if m.effect[0] == "foe" else user, m.effect[1], m.effect[2])
+		# quem encosta em pele tóxica, muco ou órgão elétrico pode sofrer
+		var rt := target.has_passive("contact_retaliate")
+		if contact and not rt.is_empty() and not user.is_fainted() and randf() * 100.0 < rt.chance:
+			await msg.say("%s de %s!" % [_passive_name(target, "contact_retaliate"), _who(target)])
+			await _apply_status(user, rt.status, target)
+		if not target.is_fainted():
+			await _apply_secondary(user, target, m, false)
 	else:
+		await _wait_anim(anim_done)
+		await _apply_secondary(user, target, m, true)
+
+
+func _passive_name(c: Creature, hook: String) -> String:
+	for p in c.passives():
+		if DB.PASSIVES[p].hook == hook:
+			return DB.PASSIVES[p].name
+	return ""
+
+
+func _wait_anim(done: Array) -> void:
+	var t := 0.0
+	while not done[0] and t < 3.0:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+
+
+## Efeitos do golpe além do dano: estágios (Ataque, Defesa...) e efeitos de estado.
+## main=true quando o efeito é o objetivo do golpe (sem dano): avisa se falhar.
+func _apply_secondary(user: Creature, target: Creature, m: Dictionary, main: bool) -> void:
+	var bonus := 0
+	var tc := user.has_passive("status_chance_bonus")
+	if not tc.is_empty():
+		bonus = tc.bonus
+	if m.has("effect"):
+		var chance: float = m.get("chance", 100) + (bonus if m.has("chance") else 0)
+		if randf() * 100.0 < chance:
+			var who := target if m.effect[0] == "foe" else user
+			await _apply_stage(who, m.effect[1], m.effect[2])
+	var st: Dictionary = m.get("status", {})
+	if not st.is_empty():
+		var who := user if st.get("target", "foe") == "self" else target
+		var chance: float = st.get("chance", 100) + (bonus if st.get("chance", 100) < 100 else 0)
+		if randf() * 100.0 < chance:
+			var ok := await _apply_status(who, st.id, user, st.get("power", 0.0))
+			if not ok and main:
+				await msg.say("Mas não teve efeito.")
+		elif main:
+			await msg.say("Mas não teve efeito.")
+	elif not m.has("effect") and m.power == 0:
 		await msg.say("Mas nada aconteceu.")
+
+
+## Aplica um efeito de estado. Retorna false se não pegou.
+func _apply_status(c: Creature, id: String, attacker: Creature, power := 0.0) -> bool:
+	if c.is_fainted() or not can_receive(c, id):
+		if not c.is_fainted() and main_immunity_msg(c, id) != "":
+			await msg.say(main_immunity_msg(c, id))
+		return false
+	if id == "atordoado" and _stun_guard.get(c, 0) > 0:
+		return false
+	var st: Dictionary = DB.STATUSES[id]
+	var turns := status_turns(c, id, attacker)
+	var entry: Dictionary = c.statuses.get(id, {"turns": 0})
+	entry.turns = maxi(entry.turns, turns)
+	if st.get("shield", false):
+		entry.hp = maxi(int(entry.get("hp", 0)), maxi(1, int(c.stats.hp * power)))
+	if st.get("flinch", false) and _acted.has(c):
+		return false  # já agiu: empurrar não faz perder a vez
+	c.statuses[id] = entry
+	_refresh_status(c)
+	await _view(c).flash(st.color)
+	await msg.say(st.msg % _who(c))
+	return true
+
+
+func main_immunity_msg(c: Creature, id: String) -> String:
+	var imm := c.has_passive("immune_status")
+	if not imm.is_empty() and id in imm.ids:
+		return "%s de %s impede o efeito!" % [_passive_name(c, "immune_status"), _who(c)]
+	return ""
 
 
 func _apply_stage(c: Creature, stat: String, amount: int) -> void:
 	var names := {"atk": "Ataque", "def": "Defesa", "spd": "Velocidade", "acc": "Precisão"}
+	var stat_name: String = names[stat]
+	if stat == "acc" and amount < 0 and not c.has_passive("keep_accuracy").is_empty():
+		await msg.say("%s de %s impede que a Precisão caia!" % [_passive_name(c, "keep_accuracy"), _who(c)])
+		return
 	var cur: int = c.stages[stat]
 	var nv := clampi(cur + amount, -6, 6)
-	var stat_name: String = names[stat]
 	if nv == cur:
 		await msg.say("%s de %s não pode %s mais!" % [stat_name, _who(c), "subir" if amount > 0 else "cair"])
 		return
 	c.stages[stat] = nv
-	var spr := mine_spr if c == mine else enemy_spr
-	var tw := create_tween()
-	var col := Color(1.0, 0.6, 0.5) if amount > 0 else Color(0.5, 0.7, 1.0)
-	for i in 2:
-		tw.tween_property(spr, "modulate", col, 0.12)
-		tw.tween_property(spr, "modulate", Color.WHITE, 0.12)
-	await tw.finished
+	var v := _view(c)
+	await v.flash(Color(1.0, 0.55, 0.45) if amount > 0 else Color(0.45, 0.65, 1.0), 2)
 	var how := ("aumentou muito" if amount > 1 else "aumentou") if amount > 0 else ("diminuiu muito" if amount < -1 else "diminuiu")
 	await msg.say("%s de %s %s!" % [stat_name, _who(c), how])
+
+
+## Fim do turno: dano/cura dos efeitos, habilidades de cura, duração e recargas.
+func _end_of_turn() -> String:
+	for c: Creature in [mine, enemy]:
+		if c.is_fainted():
+			continue
+		var ids := c.statuses.keys()
+		for id in ids:
+			if not c.statuses.has(id):
+				continue
+			var st: Dictionary = DB.STATUSES[id]
+			if st.has("dot"):
+				var d := maxi(1, int(c.stats.hp * st.dot))
+				_view(c).flash(st.color, 1)
+				await _animate_hp(c, c.hp - d)
+				await msg.say("%s sofre com o efeito: %s." % [_who(c), st.name.to_lower()])
+				var r := await _check_faints()
+				if r != "":
+					return r
+				if c.is_fainted():
+					break
+			if st.has("hot") and c.hp < c.stats.hp:
+				var hgain := maxi(1, int(c.stats.hp * st.hot))
+				fx.glow(_view(c).point_global("center"), Color("a8f080"))
+				await _animate_hp(c, c.hp + hgain)
+				await msg.say("%s recuperou um pouco de PS." % _who(c))
+			var e: Dictionary = c.statuses[id]
+			e.turns -= 1
+			if e.turns <= 0 and not st.get("on_action", false):
+				c.statuses.erase(id)
+				_refresh_status(c)
+				if st.end != "":
+					await msg.say(st.end % _who(c))
+		if c.is_fainted():
+			continue
+		var hp := c.has_passive("end_turn_heal")
+		if not hp.is_empty() and c.hp < c.stats.hp:
+			await _animate_hp(c, c.hp + maxi(1, int(c.stats.hp * hp.frac)))
+			await msg.say("%s de %s recuperou PS." % [_passive_name(c, "end_turn_heal"), _who(c)])
+		for mv in c.cooldowns.keys():
+			c.cooldowns[mv] -= 1
+			if c.cooldowns[mv] <= 0:
+				c.cooldowns.erase(mv)
+		if _stun_guard.get(c, 0) > 0:
+			_stun_guard[c] -= 1
+		# empurrão só vale no turno em que foi aplicado
+		if c.statuses.has("empurrao"):
+			c.statuses.erase("empurrao")
+			_refresh_status(c)
+	return ""
 
 
 func _check_faints() -> String:
@@ -692,26 +1054,8 @@ func _throw_net() -> bool:
 	return false
 
 
+
 # ---------------------------------------------------------------- animações
-
-func _lunge(c: Creature) -> void:
-	var spr := mine_spr if c == mine else enemy_spr
-	var dir := Vector2(18, -6) if c == mine else Vector2(-18, 6)
-	var base := spr.position
-	var tw := create_tween()
-	tw.tween_property(spr, "position", base + dir, 0.08)
-	tw.tween_property(spr, "position", base, 0.12)
-	await tw.finished
-
-
-func _hit_flash(c: Creature) -> void:
-	var spr := mine_spr if c == mine else enemy_spr
-	for i in 3:
-		spr.visible = false
-		await get_tree().create_timer(0.06).timeout
-		spr.visible = true
-		await get_tree().create_timer(0.06).timeout
-
 
 func _animate_hp(c: Creature, new_hp: int) -> void:
 	new_hp = clampi(new_hp, 0, c.stats.hp)
@@ -727,12 +1071,15 @@ func _animate_hp(c: Creature, new_hp: int) -> void:
 	await tw.finished
 
 
-func _faint_anim(spr: Sprite2D) -> void:
+## Derrota: a criatura cambaleia e cai (animação da espécie), depois some.
+func _faint_anim(v: CreatureView) -> void:
+	v.set_statuses({})
+	await v.play("defeat")
 	var tw := create_tween()
-	tw.tween_property(spr, "position", spr.position + Vector2(0, 40), 0.35)
-	tw.parallel().tween_property(spr, "modulate", Color(1, 1, 1, 0), 0.35)
+	tw.tween_property(v, "position", v.position + Vector2(0, 16), 0.3)
+	tw.parallel().tween_property(v, "modulate", Color(1, 1, 1, 0), 0.3)
 	await tw.finished
-	spr.hide()
+	v.hide()
 
 
 func _end(result: String) -> void:

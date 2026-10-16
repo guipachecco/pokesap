@@ -10,6 +10,10 @@ var moves: Array = []  # [{ "id": String, "pp": int }]
 var stats := {"hp": 1, "atk": 1, "def": 1, "spd": 1}
 ## Estágios temporários de batalha.
 var stages := {"atk": 0, "def": 0, "spd": 0, "acc": 0}
+## Efeitos de estado ativos (só na batalha): id -> {"turns": int, "hp": int (escudo)}.
+var statuses := {}
+## Golpes recarregando (só na batalha): id do golpe -> turnos restantes.
+var cooldowns := {}
 
 
 static func create(species_id: String, lvl: int) -> Creature:
@@ -40,8 +44,34 @@ func display_name() -> String:
 	return data().name
 
 
+## Classe biológica (mamifero, ave, reptil...).
+func klass() -> String:
+	return data().class
+
+
+## Mantido por compatibilidade: o "tipo" de um animal agora é a sua classe biológica.
 func type() -> String:
-	return data().type
+	return klass()
+
+
+func affinities() -> Array:
+	return data().get("affinities", [])
+
+
+func passives() -> Array:
+	return DB.passives_of(species)
+
+
+func has_passive(hook: String) -> Dictionary:
+	for p in passives():
+		var pd: Dictionary = DB.PASSIVES[p]
+		if pd.hook == hook:
+			return pd
+	return {}
+
+
+func has_status(id: String) -> bool:
+	return statuses.has(id)
 
 
 func recalc_stats() -> void:
@@ -70,14 +100,22 @@ func heal_full() -> void:
 	reset_stages()
 
 
+## Limpa tudo que só vale durante a batalha (estágios, efeitos, recargas).
 func reset_stages() -> void:
 	stages = {"atk": 0, "def": 0, "spd": 0, "acc": 0}
+	statuses = {}
+	cooldowns = {}
 
 
 func stat_in_battle(stat: String) -> float:
 	var s: int = stages[stat]
 	var mult := (2.0 + s) / 2.0 if s >= 0 else 2.0 / (2.0 - s)
-	return stats[stat] * mult
+	var v: float = stats[stat] * mult
+	for id in statuses:
+		var st: Dictionary = DB.STATUSES[id]
+		if stat == "spd" and st.has("speed_mult"):
+			v *= st.speed_mult
+	return v
 
 
 func exp_to_next() -> int:
