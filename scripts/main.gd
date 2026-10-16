@@ -1,5 +1,5 @@
 extends Node
-## Cena principal: título -> ilha -> batalhas.
+## Cena principal: título -> mundo (regiões) -> batalhas.
 
 var overworld: Overworld
 var fx: CanvasLayer
@@ -15,23 +15,27 @@ func _ready() -> void:
 	await _title()
 
 
+## Tela inicial. CONTINUAR só aparece habilitado com um save válido; se o
+## carregamento falhar, avisa e continua na tela inicial.
 func _title() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var title := TitleScreen.new()
 	layer.add_child(title)
-	var choice := await title.run()
+	var is_new := true
+	while true:
+		var choice := await title.run()
+		if choice == "new":
+			Game.new_game()
+			break
+		if Game.load_game():
+			is_new = false
+			break
+		await title.show_error("Não foi possível carregar: %s." % Game.last_error)
 	layer.queue_free()
-	var is_new := choice == "new" or not Game.load_game()
-	if is_new:
-		Game.new_game()
 	_start_overworld()
 	if is_new:
-		overworld.busy = true
-		await overworld.msg.say("Bem-vindo à Ilha Sapê, uma ilha cheia de animais brasileiros!")
-		await overworld.msg.say("A Professora Ipê está bem ali, ao lado da sua casa. Vá falar com ela!")
-		overworld.msg.hide()
-		overworld.busy = false
+		await overworld.start_new_adventure()
 
 
 func _start_overworld() -> void:
@@ -40,12 +44,12 @@ func _start_overworld() -> void:
 	overworld.battle_requested.connect(_on_battle_requested)
 
 
-func _on_battle_requested(enemy: Creature, zone: String) -> void:
+func _on_battle_requested(enemy: Creature, zone: String, opts: Dictionary) -> void:
 	await _flash_transition()
 	var battle := Battle.new()
 	add_child(battle)
 	var cover := _cover()
-	battle.start(enemy, zone)
+	battle.start(enemy, zone, opts)
 	var tw := create_tween()
 	tw.tween_property(cover, "color:a", 0.0, 0.3)
 	tw.tween_callback(cover.queue_free)
@@ -58,10 +62,7 @@ func _on_battle_requested(enemy: Creature, zone: String) -> void:
 	var tw3 := create_tween()
 	tw3.tween_property(cover2, "color:a", 0.0, 0.3)
 	tw3.tween_callback(cover2.queue_free)
-	if result == "lose":
-		await overworld.respawn_home()
-	else:
-		overworld.busy = false
+	await overworld.on_battle_finished(result, opts)
 
 
 func _cover(alpha := 1.0) -> ColorRect:

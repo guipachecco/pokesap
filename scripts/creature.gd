@@ -14,6 +14,8 @@ var stages := {"atk": 0, "def": 0, "spd": 0, "acc": 0}
 var statuses := {}
 ## Golpes recarregando (só na batalha): id do golpe -> turnos restantes.
 var cooldowns := {}
+## Nome especial (chefes da história); vazio = nome da espécie. Não é salvo.
+var nickname := ""
 
 
 static func create(species_id: String, lvl: int) -> Creature:
@@ -41,7 +43,7 @@ func data() -> Dictionary:
 
 
 func display_name() -> String:
-	return data().name
+	return nickname if nickname != "" else data().name
 
 
 ## Classe biológica (mamifero, ave, reptil...).

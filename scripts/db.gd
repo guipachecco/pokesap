@@ -286,6 +286,7 @@ const ENCOUNTERS := {
 	"campo": [["capivara", 28, 2, 4], ["tatu", 18, 2, 4], ["quati", 18, 2, 4], ["tucano", 14, 3, 5], ["morfo", 10, 2, 4], ["aranha", 7, 3, 5], ["besouro", 5, 4, 6]],
 	"brejo": [["sapo", 30, 3, 6], ["perereca", 25, 3, 5], ["jiboia", 18, 4, 7], ["poraque", 12, 4, 6], ["capivara", 10, 4, 6], ["aranha", 5, 4, 6]],
 	"praia": [["caranguejo", 45, 3, 6], ["tucano", 25, 3, 6], ["besouro", 15, 4, 6], ["morfo", 15, 3, 5]],
+	"manguezal": [["caranguejo", 35, 7, 10], ["poraque", 20, 7, 10], ["jiboia", 15, 8, 10], ["perereca", 15, 7, 9], ["aranha", 10, 8, 10], ["jacare", 5, 8, 10]],
 }
 
 const ITEMS := {

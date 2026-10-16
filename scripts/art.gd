@@ -164,6 +164,12 @@ const PEOPLE := {
 		"b": "3a9a5a", "B": "2a7a44", "a": "348c50", "c": "f8f8f8", "g": "b08850", "G": "8a6a3a", "p": "4a4a7a", "k": "2a2a2a"},
 	"menina": {"r": "f070a0", "R": "c85080", "w": "f8d0e0", "h": "8a4a20", "s": "f8d0a8", "e": "202838", "m": "e07878",
 		"b": "f8a0c8", "B": "e080a8", "a": "f090bc", "c": "ffffff", "g": "a070e0", "G": "8050c0", "p": "5a50a0", "k": "a03050"},
+	# Dito, o barqueiro: chapéu de palha largo, camisa listrada azul
+	"barqueiro": {"r": "d8b860", "R": "b89838", "w": "e8d080", "h": "3a2a1a", "s": "b8804e", "e": "202838", "m": "8a5038",
+		"b": "4a7ad0", "B": "3a5aa8", "a": "c8a070", "c": "f0f0f0", "g": "6a5a40", "G": "4a3a28", "p": "5a4a3a", "k": "3a2a20"},
+	# Iara, guarda-parque: boné verde-oliva e farda cáqui
+	"guarda": {"r": "5a6a3a", "R": "3e4a28", "w": "e8d04a", "h": "2a1a12", "s": "c88a5a", "e": "202838", "m": "9a5040",
+		"b": "b8a46a", "B": "96844e", "a": "a89458", "c": "4a5a2a", "g": "6a7a3a", "G": "4e5a2a", "p": "5a5a3a", "k": "2a2218"},
 }
 
 
@@ -274,6 +280,7 @@ const ICONS := {
 	"fugir": {"sap": "rabbit"},
 	"chick": {"sap": "chick"},
 	"opcoes": {"vector": "engrenagem"},
+	"missoes": {"vector": "pergaminho"},
 }
 
 
@@ -499,6 +506,12 @@ const VECTOR_ART := {
 		["l", 32, 14, 26, 8, 1.6, "c8f4ff"], ["l", 32, 14, 38, 8, 1.6, "c8f4ff"], ["l", 32, 50, 26, 56, 1.6, "c8f4ff"], ["l", 32, 50, 38, 56, 1.6, "c8f4ff"],
 		["c", 32, 32, 5, "e0faff"],
 	],
+	"pergaminho": [
+		["r", 12, 10, 40, 44, "f0dca8"],
+		["c", 12, 12, 5, "d8c088"], ["c", 52, 52, 5, "d8c088"],
+		["r", 18, 18, 26, 3, "8a6a4a"], ["r", 18, 26, 22, 3, "8a6a4a"], ["r", 18, 34, 26, 3, "8a6a4a"], ["r", 18, 42, 16, 3, "8a6a4a"],
+		["c", 44, 44, 6, "e04848"], ["c", 44, 44, 3, "f8a0a0"],
+	],
 	"engrenagem": [
 		["r", 27, 4, 10, 12, "8a94a4"], ["r", 27, 48, 10, 12, "8a94a4"],
 		["r", 4, 27, 12, 10, "8a94a4"], ["r", 48, 27, 12, 10, "8a94a4"],
@@ -683,6 +696,7 @@ const BATTLE_PALETTES := {
 	"campo": {"sky0": "5ab0f0", "sky1": "c8ecff", "far": "9fd8a6", "mid": "4f9a52", "ground0": "8ed46a", "ground1": "6cba4e", "plat": "5fa443", "tuft": "4e8f38"},
 	"brejo": {"sky0": "6aa8c8", "sky1": "d8f0e8", "far": "8fc4ac", "mid": "3a7a5a", "ground0": "7cb874", "ground1": "5a9a60", "plat": "4f8a52", "tuft": "3a7044"},
 	"praia": {"sky0": "48a8f0", "sky1": "d0f0ff", "far": "5aa8e8", "mid": "2f78c8", "ground0": "f2e2a8", "ground1": "e2cc88", "plat": "d6be7c", "tuft": "b8a060"},
+	"manguezal": {"sky0": "6aa0c0", "sky1": "e0f0e0", "far": "7ab49a", "mid": "2f6a4a", "ground0": "8a7a58", "ground1": "6e6044", "plat": "5e5a3a", "tuft": "4a5a34"},
 }
 
 

@@ -15,6 +15,7 @@ var mine: Creature
 var zone := "campo"
 var participants: Array[Creature] = []
 var run_attempts := 0
+var opts := {}            # {"boss": true, "title": "..."} em batalhas da história
 var _attacked := {}      # quem já deu o primeiro golpe de dano (Emboscada)
 var _acted := {}         # quem já agiu neste turno (Empurrão)
 var _stun_guard := {}    # turnos de imunidade a atordoar
@@ -273,7 +274,10 @@ func _view(c: Creature) -> CreatureView:
 # ---------------------------------------------------------------- fluxo principal
 
 ## Monta a cena da batalha (sem a entrada animada nem o laço de turnos).
-func prepare(wild: Creature, zone_id: String) -> void:
+func prepare(wild: Creature, zone_id: String, options := {}) -> void:
+	opts = options
+	if opts.has("title"):
+		wild.nickname = opts.title
 	enemy = wild
 	zone = zone_id
 	bg.texture = Art.battle_bg(zone)
@@ -290,8 +294,8 @@ func prepare(wild: Creature, zone_id: String) -> void:
 	_refresh_mine_box()
 
 
-func start(wild: Creature, zone_id: String) -> void:
-	prepare(wild, zone_id)
+func start(wild: Creature, zone_id: String, options := {}) -> void:
+	prepare(wild, zone_id, options)
 	enemy_box.hide()
 	mine_box.hide()
 	mine_spr.hide()
@@ -305,7 +309,7 @@ func start(wild: Creature, zone_id: String) -> void:
 	# vira para o jogador ao aparecer, depois assume a pose de batalha
 	enemy_spr.play("front")
 	enemy_box.show()
-	await msg.say("%s selvagem apareceu!" % enemy.display_name())
+	await msg.say(("%s bloqueia o caminho!" if opts.get("boss", false) else "%s selvagem apareceu!") % enemy.display_name())
 	enemy_spr.play("idle")
 	await _send_out(mine)
 	await _battle_loop()
@@ -368,6 +372,9 @@ func _choose_action() -> Dictionary:
 				if sw >= 0:
 					return {"kind": "switch", "idx": sw}
 			3:
+				if opts.get("boss", false):
+					await msg.say("Não dá para fugir desta batalha!")
+					continue
 				if _trapped(mine):
 					await msg.say("%s está preso e não dá para fugir!" % mine.display_name())
 					continue
@@ -439,6 +446,9 @@ func _choose_item() -> Dictionary:
 			return {}
 		var item: Dictionary = DB.ITEMS[id]
 		if id == "rede":
+			if opts.get("boss", false):
+				await msg.say("Este animal não pode ser capturado!")
+				continue
 			return {"kind": "item", "id": id}
 		if item.has("heal"):
 			party_screen.show()
@@ -633,7 +643,9 @@ func _enemy_pick_move() -> String:
 
 
 func _who(c: Creature) -> String:
-	return c.display_name() if c == mine else "%s selvagem" % c.display_name()
+	if c == mine or opts.get("boss", false):
+		return c.display_name()
+	return "%s selvagem" % c.display_name()
 
 
 # ---------------------------------------------------------------- golpes
@@ -921,7 +933,7 @@ func _check_faints() -> String:
 	if enemy.is_fainted():
 		await _faint_anim(enemy_spr)
 		enemy_box.hide()
-		await msg.say("%s selvagem desmaiou!" % enemy.display_name())
+		await msg.say(("%s desistiu da luta!" if opts.get("boss", false) else "%s selvagem desmaiou!") % enemy.display_name())
 		await _give_exp()
 		return "win"
 	if mine.is_fainted():

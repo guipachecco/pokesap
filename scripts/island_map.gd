@@ -1,6 +1,6 @@
 class_name IslandMap
-extends RefCounted
-## Gera o mapa da Ilha Sapê (determinístico) e responde consultas sobre tiles.
+extends RegionMap
+## Gera o mapa da Ilha Sapê (determinístico). As consultas de tile vêm de RegionMap.
 ##   ~ mar   s areia   . , grama   f flores   p caminho   T árvore   r pedra
 ##   G grama alta (campo)   M grama alta (brejo)   B grama alta (praia)
 ##   w lagoa   S placa   H casa   D porta
@@ -11,39 +11,13 @@ const HOUSE := Rect2i(21, 8, 5, 4)
 const DOOR := Vector2i(23, 11)
 const SPAWN := Vector2i(23, 12)
 const SIGN := Vector2i(20, 13)
-const WALKABLE := ".,fpsGMB"
-
-var grid: Array = []  # Array de PackedStringArray? Usamos Array[Array[String]]
-var npcs := {}  # nome -> Vector2i
 
 
 func _init() -> void:
+	id = "ilha"
+	w = W
+	h = H
 	generate()
-
-
-func get_tile(p: Vector2i) -> String:
-	if p.x < 0 or p.y < 0 or p.x >= W or p.y >= H:
-		return "~"
-	return grid[p.y][p.x]
-
-
-func set_tile(p: Vector2i, t: String) -> void:
-	grid[p.y][p.x] = t
-
-
-func is_walkable(p: Vector2i) -> bool:
-	return WALKABLE.contains(get_tile(p))
-
-
-func zone_at(p: Vector2i) -> String:
-	match get_tile(p):
-		"G":
-			return "campo"
-		"M":
-			return "brejo"
-		"B":
-			return "praia"
-	return ""
 
 
 func generate() -> void:

@@ -7,7 +7,7 @@ extends RefCounted
 
 const T := 16
 
-enum { GRASS, PATH, SAND, WATER, POND, TALL_G, TALL_M, TALL_B }
+enum { GRASS, PATH, SAND, WATER, POND, TALL_G, TALL_M, TALL_B, WOOD, MUD }
 
 ## Matriz de Bayer 4x4 (pontilhado ordenado, típico de pixel art).
 const BAYER := [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
@@ -67,6 +67,10 @@ static func material_of(t: String) -> int:
 	match t:
 		"p", "D":
 			return PATH
+		"b":
+			return WOOD
+		"m":
+			return MUD
 		"s":
 			return SAND
 		"~":
@@ -85,8 +89,8 @@ static func material_of(t: String) -> int:
 # ---------------------------------------------------------------- chão
 
 ## Chão da ilha inteira numa textura só. detail: 0 baixo, 1 médio, 2 alto.
-static func ground(map: IslandMap, detail: int) -> Texture2D:
-	return _cached("ground_%d" % detail, func(): return ImageTexture.create_from_image(_build_ground(map, detail)))
+static func ground(map: RegionMap, detail: int) -> Texture2D:
+	return _cached("ground_%s_%d" % [map.id, detail], func(): return ImageTexture.create_from_image(_build_ground(map, detail)))
 
 
 static func _noise_bytes(w: int, h: int, seed_val: int, freq: float) -> PackedByteArray:
@@ -129,10 +133,10 @@ static func _water_depth(tmat: PackedByteArray, tw: int, th: int) -> PackedByteA
 ## Material e profundidade da água de cada pixel da ilha: [mats, deps].
 ## Cada pixel olha o material de um ponto levemente deslocado por ruído, então as
 ## bordas entre terrenos ficam irregulares e naturais, sem degraus de tile.
-static func _pixel_materials(map: IslandMap) -> Array:
-	return _cached("pixel_materials", func():
-		var tw := IslandMap.W
-		var th := IslandMap.H
+static func _pixel_materials(map: RegionMap) -> Array:
+	return _cached("pixel_materials_" + map.id, func():
+		var tw := map.w
+		var th := map.h
 		var w := tw * T
 		var h := th * T
 		var tmat := PackedByteArray()
@@ -154,14 +158,18 @@ static func _pixel_materials(map: IslandMap) -> Array:
 				var wx := clampi(x + ((nx[i] * 9) >> 8) - 4, 0, w - 1)
 				var wy := clampi(y + ((ny[i] * 9) >> 8) - 4, 0, h - 1)
 				var ti := (wy >> 4) * tw + (wx >> 4)
+				var t0 := (y >> 4) * tw + (x >> 4)
+				# a passarela de tábuas tem borda reta (não entra no deslocamento)
+				if tmat[t0] == WOOD or tmat[ti] == WOOD:
+					ti = t0
 				mats[i] = tmat[ti]
 				deps[i] = tdepth[ti]
 		return [mats, deps])
 
 
-static func _build_ground(map: IslandMap, detail: int) -> Image:
-	var w := IslandMap.W * T
-	var h := IslandMap.H * T
+static func _build_ground(map: RegionMap, detail: int) -> Image:
+	var w := map.w * T
+	var h := map.h * T
 	var pm := _pixel_materials(map)
 	var mats: PackedByteArray = pm[0]
 	var deps: PackedByteArray = pm[1]
@@ -220,7 +228,11 @@ static func _build_ground(map: IslandMap, detail: int) -> Image:
 					c = W_SHALLOW if dv < 24 else (W_MID if dv < 40 else W_DEEP)
 					if y % 7 == 0 and (x + y * 3) % 29 < 4:
 						c = W_LINE
-					if _touches(mats, i, w, h, x, y, WATER, 1):
+					if up == WOOD or (y >= 2 and mats[i - w * 2] == WOOD):
+						c = W_DEEP.darkened(0.25)  # sombra embaixo da passarela
+					elif lf == WOOD or rt == WOOD:
+						c = W_MID.darkened(0.15)
+					elif _touches(mats, i, w, h, x, y, WATER, 1):
 						c = W_FOAM
 					elif _touches(mats, i, w, h, x, y, WATER, 2) and (x + y) % 2 == 0:
 						c = W_FOAM2
@@ -228,6 +240,45 @@ static func _build_ground(map: IslandMap, detail: int) -> Image:
 					c = L_SHALLOW if deps[i] < 2 else L_DEEP
 					if _touches(mats, i, w, h, x, y, POND, 1):
 						c = L_FOAM
+				WOOD:
+					# tábuas atravessadas com frestas, pregos e bordas escuras
+					var ly := y % T
+					var lx := x % T
+					var tp := Vector2i(x >> 4, y >> 4)
+					var horiz := (map.get_tile(tp + Vector2i.LEFT) == "b" or map.get_tile(tp + Vector2i.RIGHT) == "b") \
+						and not (map.get_tile(tp + Vector2i.UP) == "b" or map.get_tile(tp + Vector2i.DOWN) == "b")
+					if horiz:
+						# passarela deitada: tábuas em pé
+						var tmp := lx
+						lx = ly
+						ly = tmp
+						var t2 := lf
+						lf = up
+						rt = dn
+						up = t2
+					c = Color("b0824e")
+					if ly % 4 == 3:
+						c = Color("6e4a2a")
+					elif ly % 4 == 0:
+						c = Color("c89a62")
+					elif (lx + (ly / 4) * 5) % 16 == 0:
+						c = Color("7e5632")
+					if (lx == 2 or lx == 13) and ly % 4 == 1:
+						c = Color("4a3a30")
+					if lf != WOOD or rt != WOOD:
+						c = Color("5a3a20")
+				MUD:
+					var v := tone[i] + (b - 8) * 6
+					c = Color("7a6448") if v < 120 else (Color("8a7454") if v < 190 else Color("9a8462"))
+					var hs := _hash(x, y, 4) % 61
+					if hs < 2:
+						c = Color("5e4a34")
+					elif hs == 2:
+						c = Color("b8a888")  # brilho de lama molhada
+					if _near(mats, i, w, h, x, y, WATER, 1):
+						c = Color("5e4e3a")
+					elif up == GRASS or dn == GRASS or lf == GRASS or rt == GRASS:
+						c = Color("6a5a3e")
 				_:
 					c = TALL_BASE[m]
 					if (b + tone[i] / 32) % 5 == 0:
@@ -358,14 +409,14 @@ static func _reeds() -> Image:
 
 
 ## Espalha detalhes pequenos pelo chão, conforme o nível de detalhe.
-static func _decorate(img: Image, map: IslandMap, mats: PackedByteArray, detail: int) -> void:
+static func _decorate(img: Image, map: RegionMap, mats: PackedByteArray, detail: int) -> void:
 	var w := img.get_width()
 	var blades: int = [1, 3, 5][detail]
 	var extra_flowers: float = [0.0, 0.06, 0.14][detail]
 	var pebbles: int = [0, 1, 2][detail]
 	var shells: float = [0.0, 0.03, 0.07][detail]
-	for ty in IslandMap.H:
-		for tx in IslandMap.W:
+	for ty in map.h:
+		for tx in map.w:
 			var t := map.get_tile(Vector2i(tx, ty))
 			var base := Vector2i(tx * T, ty * T)
 			var hs := _hash(tx, ty, 77)
@@ -413,7 +464,7 @@ static func _decorate(img: Image, map: IslandMap, mats: PackedByteArray, detail:
 							img.blend_rect(_shell(hs % 2), Rect2i(0, 0, 5, 4), p)
 
 
-static func _next_to(map: IslandMap, x: int, y: int, t: String) -> bool:
+static func _next_to(map: RegionMap, x: int, y: int, t: String) -> bool:
 	for d in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
 		if map.get_tile(Vector2i(x, y) + d) == t:
 			return true
@@ -465,10 +516,10 @@ static func _tuft(kind: String, frame: int, shade: int, shape := 0) -> Image:
 
 ## Camada com toda a grama alta da ilha (frame 0/1 balança as pontas). Os tufos só
 ## aparecem onde o chão é de grama alta, então a borda das áreas fica irregular.
-static func tall_layer(map: IslandMap, frame: int) -> Texture2D:
-	return _cached("tall_layer_%d" % frame, func():
-		var w := IslandMap.W * T
-		var h := IslandMap.H * T
+static func tall_layer(map: RegionMap, frame: int) -> Texture2D:
+	return _cached("tall_layer_%s_%d" % [map.id, frame], func():
+		var w := map.w * T
+		var h := map.h * T
 		var mats: PackedByteArray = _pixel_materials(map)[0]
 		var img := _img(w, h)
 		var area := Rect2i()
@@ -870,20 +921,20 @@ static func actor_shadow() -> Texture2D:
 
 ## Imagem do tamanho da ilha com as sombras dos objetos fixos. Sombras que se
 ## sobrepõem não escurecem duas vezes (o pixel é definido, não somado).
-static func shadow_layer(objects: Array) -> Texture2D:
-	return _cached("shadows", func():
-		var img := _img(IslandMap.W * T, IslandMap.H * T)
+static func shadow_layer(map: RegionMap, objects: Array) -> Texture2D:
+	return _cached("shadows_" + map.id, func():
+		var img := _img(map.w * T, map.h * T)
 		for o in objects:
 			var kind: String = o[0]
 			var base: Vector2 = o[1]
 			match kind:
-				"tree":
+				"tree", "mangrove":
 					_shadow_ellipse(img, base + Vector2(3, -2), Vector2(11, 4.5))
 				"palm":
 					_shadow_ellipse(img, base + Vector2(4, -1), Vector2(10, 3.5))
 				"rock":
 					_shadow_ellipse(img, base + Vector2(2, -1), Vector2(8, 3))
-				"sign":
+				"sign", "campfire":
 					_shadow_ellipse(img, base + Vector2(2, -1), Vector2(6, 2))
 				"house":
 					var r := Rect2i(int(base.x) + 4, int(base.y) - 6, HOUSE_W - 2, 9)
@@ -919,3 +970,112 @@ static func butterfly(color_idx: int, frame: int) -> Texture2D:
 			"..b..",
 		]
 		return ImageTexture.create_from_image(Art.rows_to_image(rows, {"w": Color(col), "b": Color("3a2a2a")}, true)))
+
+
+# ---------------------------------------------------------------- fogueira, barco, mangue
+
+## Fogueira (20x22). lit=false: lenha e cinzas frias; lit=true: chamas (frame 0..2).
+static func campfire(lit: bool, frame := 0) -> Texture2D:
+	return _cached("fogueira_%s_%d" % [lit, frame if lit else 0], func():
+		var img := _img(20, 22)
+		# anel de pedras
+		var stones := [Vector2(3, 17), Vector2(6, 19), Vector2(10, 20), Vector2(14, 19), Vector2(17, 17), Vector2(5, 15), Vector2(15, 15)]
+		for s in stones:
+			_disc(img, s, 2.2, Color("8a8a96"))
+			img.set_pixel(int(s.x) - 1, int(s.y) - 1, Color("c8c8d2"))
+		# lenha cruzada
+		for i in 3:
+			var a := Vector2(4 + i * 2, 18 - i)
+			var b := Vector2(16 - i * 2, 13 + i)
+			for k in 14:
+				var p := a.lerp(b, k / 13.0)
+				_disc(img, p, 1.3, Color("7a4a26") if k % 4 else Color("5a3418"))
+		if not lit:
+			for k in 8:
+				img.set_pixel(7 + k, 16 + (k % 3) - 1, Color("9a9a9a") if k % 2 else Color("6a6a6a"))
+		else:
+			# chamas em três camadas, balançando conforme o quadro
+			var sway: int = [0, 1, -1][frame % 3]
+			_flame(img, Vector2(10 + sway, 15), 6.5, 10, Color("e8401c"))
+			_flame(img, Vector2(10 - sway * 0.5, 15), 4.5, 8, Color("f89a2a"))
+			_flame(img, Vector2(10 + sway * 0.5, 15), 2.5, 5, Color("fff0a0"))
+			var spark: Vector2 = [Vector2(6, 3), Vector2(13, 1), Vector2(9, 0)][frame % 3]
+			img.set_pixel(int(spark.x), int(spark.y), Color("ffd060"))
+		var out: Image = img.duplicate()
+		for y in img.get_height():
+			for x in img.get_width():
+				if img.get_pixel(x, y).a > 0.0:
+					continue
+				for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+					var q: Vector2i = Vector2i(x, y) + d
+					if q.x >= 0 and q.y >= 0 and q.x < 20 and q.y < 22 and img.get_pixelv(q).a > 0.5:
+						var c := img.get_pixelv(q)
+						out.set_pixel(x, y, Color.from_hsv(c.h, c.s, c.v * 0.35))
+						break
+		return ImageTexture.create_from_image(out))
+
+
+static func _disc(img: Image, c: Vector2, r: float, col: Color) -> void:
+	for y in range(int(c.y - r) - 1, int(c.y + r) + 2):
+		for x in range(int(c.x - r) - 1, int(c.x + r) + 2):
+			if x >= 0 and y >= 0 and x < img.get_width() and y < img.get_height() and Vector2(x + 0.5, y + 0.5).distance_to(c) <= r:
+				img.set_pixel(x, y, col)
+
+
+static func _flame(img: Image, base: Vector2, half_w: float, height: float, col: Color) -> void:
+	for y in range(int(base.y - height), int(base.y) + 1):
+		var t := (base.y - y) / height
+		var hw := half_w * (1.0 - t * t) * (0.6 + 0.4 * (1.0 - t))
+		for x in range(int(base.x - hw), int(base.x + hw) + 1):
+			if x >= 0 and y >= 0 and x < img.get_width() and y < img.get_height():
+				img.set_pixel(x, y, col)
+
+
+## Halo de luz da fogueira (somado à cena).
+static func glow_texture() -> Texture2D:
+	return _cached("brilho", func():
+		var s := 64
+		var img := _img(s, s)
+		for y in s:
+			for x in s:
+				var d := Vector2(x - s / 2 + 0.5, (y - s / 2 + 0.5) * 1.4).length() / (s / 2.0)
+				if d < 1.0:
+					var a := (1.0 - d) * (1.0 - d) * 0.45
+					# em degraus, como em pixel art
+					a = floorf(a * 8.0) / 8.0
+					img.set_pixel(x, y, Color(1.0, 0.65, 0.25, a))
+		return ImageTexture.create_from_image(img))
+
+
+## Canoa de madeira (36x14) atracada no cais.
+static func boat() -> Texture2D:
+	return _cached("barco", func():
+		var img := Art.rows_to_image([
+			"..wwwwwwwwwwwwwwwwwwwwwwwwwwwwww..",
+			".wllllllllllllllllllllllllllllllw.",
+			"wlddddddddddddddddddddddddddddddlw",
+			"wlbbbbbbbbbbbbbbbbbbbbbbbbbbbbbblw",
+			".wdddddddddddddddddddddddddddddw..",
+			"..wwwwwwwwwwwwwwwwwwwwwwwwwwwww...",
+			"....rrrrrrrrrrrrrrrrrrrrrrrrr.....",
+		], {"w": Color("7a4a26"), "l": Color("c8945a"), "d": Color("9a6438"), "b": Color("5a3a20"), "r": Color("3a6aa8")}, true, false, "r")
+		return ImageTexture.create_from_image(img))
+
+
+## Árvore do mangue: a árvore normal com raízes-escora arqueadas embaixo (28x38).
+static func mangrove(variant: int) -> Texture2D:
+	return _cached("mangue_%d" % variant, func():
+		var t: Image = tree(variant % 3 + 3).get_image()
+		var img := _img(TREE_W, TREE_H + 6)
+		img.blend_rect(t, Rect2i(0, 0, TREE_W, TREE_H - 3), Vector2i(0, 0))
+		var root := Color("5a3a22")
+		var root_l := Color("8a5a32")
+		for k in 5:
+			var x0 := 14.0 + (k - 2) * 1.0
+			var x1 := 14.0 + (k - 2) * 5.5
+			for i in 12:
+				var tt := i / 11.0
+				var p := Vector2(lerpf(x0, x1, tt), lerpf(TREE_H - 8, TREE_H + 5, tt) - sin(tt * PI) * 3.0)
+				_disc(img, p, 1.0, root_l if i % 3 == 0 else root)
+		_outline(img, Color("2a1a10"))
+		return ImageTexture.create_from_image(img))
