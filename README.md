@@ -3,12 +3,12 @@
 Jogo 2D no estilo Pokémon, feito em **Godot 4.7**, com **animais brasileiros de verdade**.
 Por enquanto é uma ilha pequena (Ilha Sapê) para explorar, com encontros na grama alta e batalhas por turnos.
 
-Visual em pixel art inspirado em Super Auto Pets: os animais, comidas e itens vêm de um pacote de sprites
-em pixel art (pasta `assets/sap/`), e os animais brasileiros que não existem no pacote (capivara, tatu, quati,
-tucano, sapo e perereca) são desenhados em código no mesmo estilo (`scripts/art.gd`). A fonte pixel art com
-acentos (`scripts/ui/pixel_font.gd`), os painéis, os fundos de batalha e o mapa também são gerados em código.
+Visual em pixel art. Os animais são desenhados por partes articuladas e animados quadro a quadro
+(`scripts/creature_art.gd`, `scripts/creature_rigs.gd`, spritesheets em `assets/creatures/`). Ícones de itens, comidas
+e classes vêm de um pacote de pixel art inspirado em Super Auto Pets (pasta `assets/sap/`). A fonte pixel art com
+acentos (`scripts/ui/pixel_font.gd`), os painéis, os fundos de batalha e a ilha também são gerados em código.
 
-**Créditos dos sprites:** derivados de Noto Emoji (Google, Apache-2.0), Twemoji (Twitter, CC BY 4.0) e
+**Créditos dos ícones:** derivados de Noto Emoji (Google, Apache-2.0), Twemoji (Twitter, CC BY 4.0) e
 FxEmoji (Mozilla, CC BY 4.0), convertidos em pixel art. Detalhes em `assets/sap/FONTES_E_LICENCAS.md`.
 
 ## Como jogar
@@ -52,21 +52,52 @@ pergunta se quer manter: sem resposta em 12 segundos, volta sozinho para a confi
 ## O que já tem
 
 - **Ilha** com 3 regiões de grama alta: Campo (norte), Brejo (sul) e Praia (leste), cada uma com animais diferentes.
-- **13 animais**: Mico-leão-dourado, Arara-azul, Jacaré-de-papo-amarelo (iniciais), Capivara, Tatu-bola, Quati, Tucano, Jiboia, Sapo-cururu, Perereca, Besouro-rinoceronte, Morfo-azul e Caranguejo-uçá.
-- **7 tipos** inspirados na cadeia alimentar: Normal, Mamífero, Ave, Réptil, Anfíbio, Aquático e Inseto.
-  Triângulo dos iniciais: Mamífero > Ave > Réptil > Mamífero.
-- **Batalha completa**: 28 golpes com PP, precisão, prioridade, crítico, bônus do mesmo tipo (STAB),
-  efetividade de tipo, golpes de status (sobe/desce Ataque, Defesa, Velocidade e Precisão), fuga, troca de animal,
-  itens (Fruta, Super Fruta) e **captura com Rede**.
+- **15 animais**: Mico-leão-dourado, Arara-azul, Jacaré-de-papo-amarelo (iniciais), Capivara, Tatu-bola, Quati, Tucano,
+  Jiboia, Sapo-cururu, Perereca, Besouro-rinoceronte, Morfo-azul, Caranguejo-uçá, Caranguejeira e Poraquê.
+- **Batalha completa**: golpes com PP, precisão, prioridade, crítico, recarga, efeitos de estado, habilidades passivas,
+  fuga, troca de animal, itens (Fruta, Super Fruta) e **captura com Rede**.
 - **Experiência e níveis**: EXP dividida entre quem lutou, subida de nível, novos golpes (com escolha de qual esquecer).
 - **Registro** (o "Pokédex") com descrições reais de cada animal, **salvar/continuar** o jogo.
+
+## Criaturas, classes e combate
+
+**Classe biológica** (o que o animal é) e **elemento** (o que o golpe usa) são separados. Uma jiboia é Réptil e uma
+caranguejeira é Aracnídeo; qualquer uma pode ter golpes de Veneno.
+
+- **13 classes** (`DB.CLASSES`): Mamífero, Ave, Réptil, Anfíbio, Peixe, Inseto, Aracnídeo, Crustáceo, Molusco,
+  Anelídeo, Cnidário, Pré-histórico e Fantástico. Cada classe tem resistências e fraquezas a elementos e uma habilidade
+  própria (ex.: Ave: a terra não atinge e a Precisão não cai; Crustáceo: carapaça contra golpes físicos e sem críticos;
+  Peixe: não fica preso, mas sofre com elétrico). Molusco, Anelídeo, Cnidário, Pré-histórico e Fantástico ainda não têm
+  animais na ilha: estão prontas para os próximos.
+- **10 elementos** (`DB.ELEMENTS`): Físico, Água, Ar, Terra, Planta, Veneno, Fogo, Elétrico, Gelo e Especial.
+  Golpes do elemento natural do animal (afinidades) ficam 50% mais fortes.
+- **Cadeia alimentar** (`DB.FOOD_CHAIN`): em golpes de contato, o predador leva vantagem sobre a presa.
+  O triângulo dos iniciais continua: Mamífero > Ave > Réptil > Mamífero.
+- **Efeitos de estado** (`DB.STATUSES`): Envenenado, Queimado, Lento, Congelado, Atordoado, Preso, Empurrado, Escudo e
+  Regenerando. Cada um tem duração; reaplicar renova a duração (não acumula); efeitos que fazem perder a vez não se
+  somam e depois de atordoado há 1 turno de imunidade. Trocar de animal ou terminar a batalha limpa tudo.
+- **Habilidades passivas** (`DB.PASSIVES`): gatilhos genéricos (retaliar quem encosta, imunidade, desviar, regenerar,
+  primeiro golpe mais forte, sem críticos...). Ex.: Glândulas de Veneno do sapo, Órgão Elétrico do poraquê, Constritora
+  da jiboia.
+
+**Sprites e animações.** Cada animal é montado por partes articuladas (`scripts/creature_rigs.gd`) e desenhado em pixel art
+por `scripts/creature_art.gd`: luz vinda de cima, rampa de 5 tons, textura do material (pelo, escamas, penas, pele,
+carapaça), sombra de contato entre partes e contorno colorido. Cada pose é desenhada de novo, então as animações têm
+quadros de verdade: parada, andar, dano, esquiva, derrota, fortalecer, rugido, disparo e golpes por estilo (mordida, bote,
+bicada, garra, coice, ferrão, pinça, língua, salto, mergulho, rajada, cavar), com preparação, avanço até o alvo,
+impacto e recuperação. O dano só é aplicado no quadro de impacto (ou quando o projétil chega). As spritesheets ficam em
+`assets/creatures/<id>.png` + `.json` (formato descrito em `scripts/creature_sprites.gd`).
+
+**Para adicionar um animal:** crie a entrada em `DB.SPECIES` (classe, afinidades, atributos, golpes, habilidade), escreva o
+rig em `CreatureRigs` (registre em `build` e em `POINTS`) e rode `tools/bake_creatures.tscn`. Também dá para usar uma
+spritesheet desenhada à mão no mesmo formato, sem rig. Depois coloque-o em alguma tabela de `DB.ENCOUNTERS`.
 
 ## Estrutura
 
 ```
 scenes/main.tscn        cena principal
 scripts/main.gd         título -> ilha -> batalhas
-scripts/db.gd           (autoload DB) tipos, golpes, espécies, encontros, itens
+scripts/db.gd           (autoload DB) classes, elementos, efeitos, habilidades, golpes, espécies, encontros, itens
 scripts/game.gd         (autoload Game) equipe, mochila, registro, salvamento
 scripts/creature.gd     um animal: status, golpes, EXP
 scripts/settings.gd     (autoload Settings) configurações gráficas: exibição, brilho, qualidade, salvar/carregar
@@ -77,25 +108,34 @@ scripts/ui/pixel_font.gd fonte bitmap em pixel art
 assets/sap/             sprites do pacote Super Auto Pets (com licenças)
 scripts/island_map.gd   geração do mapa da ilha
 scripts/overworld.gd    exploração (8 direções), NPCs, grama alta, animações do cenário, menu
-scripts/battle.gd       sistema de batalha
+scripts/battle.gd       sistema de batalha (turnos, dano, efeitos, habilidades, captura)
+scripts/creature_art.gd  desenho das criaturas em pixel art a partir de partes
+scripts/creature_rigs.gd rigs (partes e poses) de cada espécie
+scripts/creature_sprites.gd animações, geração e leitura das spritesheets
+scripts/creature_view.gd criatura animada na batalha (golpes, dano, efeitos de estado)
+scripts/battle_fx.gd    projéteis, raios, partículas, ondas e tremor
+assets/creatures/       spritesheets das criaturas (geradas por tools/bake_creatures.tscn)
 scripts/ui/             caixa de texto, menus, telas de equipe/mochila/registro/resumo/configurações
 tools/                  testes automáticos
 ```
 
-Para adicionar um animal: crie a entrada em `DB.SPECIES` (`scripts/db.gd`), escolha o sprite em `Art.SPECIES_SPRITES`
-(`scripts/art.gd`) e coloque-o em alguma tabela de `DB.ENCOUNTERS`.
 
 ## Testes
 
 ```
 godot --headless --path . tools/test_logic.tscn
 godot --headless --path . tools/test_movement.tscn
+godot --headless --path . tools/test_combat.tscn
+godot --path . tools/battle_shots.tscn -- <pasta_para_capturas>
 godot --path . tools/test_settings.tscn -- <pasta_para_capturas>
 godot --path . tools/world_shots.tscn -- <pasta_para_capturas>
 godot --path . tools/autoplay.tscn -- <pasta_para_capturas>
 ```
 
-- `test_logic`: dados, dano, tipos, captura, EXP, salvamento e se o mapa é todo alcançável.
+- `test_logic`: dados (classes, elementos, efeitos, habilidades, golpes), dano, cadeia alimentar, captura, EXP,
+  salvamento e se o mapa é todo alcançável.
+- `test_combat`: efeitos no fim do turno, atordoar, prender, escudo, recarga, retaliação e empurrão com as animações rodando.
+- `battle_shots`: roda 23 golpes entre pares de animais e salva folhas com os quadros de cada golpe.
 - `test_movement`: as 8 direções, velocidade igual na diagonal e na reta, teclas opostas, quinas, colisões e soltar as teclas.
 - `test_settings`: cada modo de exibição, resolução, escala, VSync, brilho (mede a imagem), qualidade, salvar/carregar,
   arquivo inválido e a tela de configurações pelo teclado. Guarda e devolve as configurações de quem está jogando.
