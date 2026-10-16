@@ -7,7 +7,10 @@ extends RefCounted
 
 const T := 16
 
-enum { GRASS, PATH, SAND, WATER, POND, TALL_G, TALL_M, TALL_B, WOOD, MUD }
+enum { GRASS, PATH, SAND, WATER, POND, TALL_G, TALL_M, TALL_B, WOOD, MUD, FLOOR, WALL }
+
+## Papel de parede de cada sala: [fundo, listra].
+const WALLPAPER := {"hospital": ["e6f4ec", "d0e8dc"], "mercado": ["f6e4b4", "ead296"], "guilda": ["dcdcee", "c8c8e0"]}
 
 ## Matriz de Bayer 4x4 (pontilhado ordenado, típico de pixel art).
 const BAYER := [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
@@ -69,6 +72,10 @@ static func material_of(t: String) -> int:
 			return PATH
 		"b":
 			return WOOD
+		"_", "c", "e":
+			return FLOOR
+		"#":
+			return WALL
 		"m":
 			return MUD
 		"s":
@@ -160,7 +167,9 @@ static func _pixel_materials(map: RegionMap) -> Array:
 				var ti := (wy >> 4) * tw + (wx >> 4)
 				var t0 := (y >> 4) * tw + (x >> 4)
 				# a passarela de tábuas tem borda reta (não entra no deslocamento)
-				if tmat[t0] == WOOD or tmat[ti] == WOOD:
+				var m0 := tmat[t0]
+				var m1 := tmat[ti]
+				if m0 == WOOD or m1 == WOOD or m0 == FLOOR or m1 == FLOOR or m0 == WALL or m1 == WALL:
 					ti = t0
 				mats[i] = tmat[ti]
 				deps[i] = tdepth[ti]
@@ -279,6 +288,44 @@ static func _build_ground(map: RegionMap, detail: int) -> Image:
 						c = Color("5e4e3a")
 					elif up == GRASS or dn == GRASS or lf == GRASS or rt == GRASS:
 						c = Color("6a5a3e")
+				FLOOR:
+					# piso de tábuas deitadas; o tapete da saída é vermelho com borda
+					var lx := x % T
+					var ly := y % T
+					var tp := Vector2i(x >> 4, y >> 4)
+					if map.get_tile(tp) == "e":
+						c = Color("b84a3a") if lx > 1 and lx < 14 and ly > 1 and ly < 14 else Color("7a2a24")
+						if (lx + ly) % 4 == 0 and lx > 2 and lx < 13 and ly > 2 and ly < 13:
+							c = Color("d8705a")
+					else:
+						var plank := ly / 4
+						c = Color("d4a464") if plank % 2 == 0 else Color("c8985a")
+						if ly % 4 == 3:
+							c = Color("9a6a3a")
+						elif (lx + plank * 7 + tp.x * 5) % 16 == 0:
+							c = Color("8a5a32")
+						elif _hash(x, y, 8) % 37 == 0:
+							c = c.darkened(0.08)
+						if map.get_tile(tp + Vector2i.UP) == "#" and ly < 3:
+							c = c.darkened(0.22 - ly * 0.07)  # sombra da parede
+				WALL:
+					var lx := x % T
+					var ly := y % T
+					var tp := Vector2i(x >> 4, y >> 4)
+					var below := map.get_tile(tp + Vector2i.DOWN)
+					var pal: Array = WALLPAPER.get(map.id, ["eadcc0", "dccaa8"])
+					if tp.y <= 1 and tp.x > 0 and tp.x < map.w - 1:
+						# parede do fundo: papel de parede listrado e rodapé
+						c = Color(pal[0]) if (x / 4) % 2 == 0 else Color(pal[1])
+						if tp.y == 0 and ly < 3:
+							c = Color("6e4a2a") if ly < 2 else Color("9a6a3a")
+						if below != "#" and ly >= 12:
+							c = Color("7a4a26") if ly >= 14 else Color("a06a3a")
+					else:
+						# paredes laterais e de baixo: madeira escura com friso
+						c = Color("5a3a22")
+						if (tp.x == 0 and lx >= 13) or (tp.x == map.w - 1 and lx <= 2) or (tp.y == map.h - 1 and ly <= 2):
+							c = Color("8a5a32")
 				_:
 					c = TALL_BASE[m]
 					if (b + tone[i] / 32) % 5 == 0:
@@ -760,16 +807,38 @@ const HOUSE_H := 88
 
 ## Casa detalhada. A imagem é 2 px mais larga de cada lado que a área da casa (beiral)
 ## e o telhado sobe acima da área ocupada.
-static func house() -> Texture2D:
-	return _cached("house", func(): return ImageTexture.create_from_image(_make_house()))
+## style: "casa" (telhado vermelho), "hospital" (azul, cruz vermelha), "mercado" (verde,
+## toldo listrado e moeda) ou "guilda" (roxo, escudo da Guilda).
+static func house(style := "casa") -> Texture2D:
+	return _cached("house_" + style, func(): return ImageTexture.create_from_image(_make_house(style)))
 
 
-static func _make_house() -> Image:
+const ROOFS := {
+	"casa": ["8a2e2a", "b23e36", "d0504a", "e8705e", "f49a7e"],
+	"hospital": ["24607e", "2f7a9e", "3c94b8", "62b4d4", "98d4ec"],
+	"mercado": ["2e6a2e", "3e8a3a", "4fa448", "70c060", "a0dc88"],
+	"guilda": ["4a2a6a", "5e3a88", "7650a8", "9470c8", "b898e0"],
+}
+
+## Placa acima da porta (11x8): cruz, moeda ou escudo.
+const EMBLEMS := {
+	"hospital": [["wwwwwwwwwww", "wwwwrrrwwww", "wwwwrrrwwww", "wrrrrrrrrrw", "wrrrrrrrrrw", "wwwwrrrwwww", "wwwwrrrwwww", "wwwwwwwwwww"],
+		{"w": "fffaf0", "r": "e04040"}],
+	"mercado": [["bbbbbbbbbbb", "bbbbyyybbbb", "bbbyyoyybbb", "bbyyoyoyybb", "bbyyoyoyybb", "bbbyyoyybbb", "bbbbyyybbbb", "bbbbbbbbbbb"],
+		{"b": "3e8a3a", "y": "f8d040", "o": "c88a18"}],
+	"guilda": [["ppppppppppp", "ppgggggggpp", "ppgyyyyygpp", "ppgyysyygpp", "ppgyysyygpp", "pppgyyygppp", "ppppgggpppp", "ppppppppppp"],
+		{"p": "5e3a88", "g": "f0c040", "y": "c83c3c", "s": "fff0a0"}],
+}
+
+
+static func _make_house(style := "casa") -> Image:
 	var w := HOUSE_W
 	var h := HOUSE_H
 	var img := _img(w, h)
 	var ink := Color("3a2620")
-	var roof := [Color("8a2e2a"), Color("b23e36"), Color("d0504a"), Color("e8705e"), Color("f49a7e")]
+	var roof := []
+	for hex in ROOFS.get(style, ROOFS.casa):
+		roof.append(Color(hex))
 	var roof_top := 8
 	var roof_bot := 44
 	# telhado de quatro águas com fileiras de telhas
@@ -867,6 +936,21 @@ static func _make_house() -> Image:
 	img.set_pixel(dx + 6, dy + 6, Color("e0f4ff"))
 	img.set_pixel(dx + 12, dy + 17, Color("f8d040"))
 	img.set_pixel(dx + 12, dy + 18, Color("c89820"))
+	# placa da construção acima da porta
+	if EMBLEMS.has(style):
+		var rows: Array = EMBLEMS[style][0]
+		var pal: Dictionary = EMBLEMS[style][1]
+		for ey in rows.size():
+			for ex in (rows[ey] as String).length():
+				img.set_pixel(dx + 2 + ex, 46 + ey, Color(pal[rows[ey][ex]]))
+		for ex in range(dx + 1, dx + 14):
+			img.set_pixel(ex, 45, Color("6a3a1a"))
+			img.set_pixel(ex, 54, Color("6a3a1a"))
+	# toldo listrado do mercado
+	if style == "mercado":
+		for ay in range(42, 46):
+			for ax in range(dx - 4, dx + 20):
+				img.set_pixel(ax, ay, Color("f4f0e0") if (ax / 3) % 2 == 0 else Color("e04848"))
 	# degrau
 	for y in range(h - 4, h):
 		for x in range(dx - 2, dx + 18):

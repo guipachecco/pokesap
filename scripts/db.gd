@@ -43,7 +43,14 @@ const CLASSES := {
 		"resist": {"fisico": 0.75, "gelo": 2.0}, "desc": "Força física enorme. Mordidas, caudas e investidas."},
 	"fantastico": {"name": "Fantástico", "color": Color("b060e0"), "passive": "",
 		"resist": {"especial": 0.5}, "desc": "Criaturas de lenda, com poderes e regras próprias."},
+	"vegetal": {"name": "Vegetal", "color": Color("4aa84a"), "passive": "regenerar",
+		"resist": {"agua": 0.5, "terra": 0.5, "fogo": 2.0, "gelo": 1.5}, "desc": "Criaturas-planta que fazem fotossíntese e se regeneram."},
+	"aquatico": {"name": "Aquático", "color": Color("2f8ac8"), "passive": "escorregadio",
+		"resist": {"agua": 0.5, "fogo": 0.5, "eletrico": 2.0}, "desc": "Criaturas que vivem na água (mamíferos marinhos, por exemplo)."},
 }
+
+## A condição de MUTANTE não é uma classe: é uma marca a mais (ícone próprio) que
+## qualquer criatura pode ter, junto com a sua classe e as suas afinidades.
 
 ## Cadeia alimentar: em golpes de CONTATO, quem caça leva vantagem sobre a presa.
 ## atacante -> {defensor: multiplicador}. Mantém o triângulo Mamífero > Ave > Réptil > Mamífero.
@@ -217,66 +224,66 @@ const SPECIES := {
 	},
 	"capivara": {
 		"num": 4, "name": "Capivara", "class": "mamifero", "size": "big", "affinities": ["fisico", "agua"], "base": [62, 45, 50, 35], "exp": 60, "catch": 190,
-		"learn": [[1, "investida"], [4, "enrijecer"], [8, "mordida"], [13, "mergulho"], [16, "banho_lama"]],
+		"learn": [[1, "investida"], [4, "enrijecer"], [5, "mordida"], [13, "mergulho"], [16, "banho_lama"]],
 		"dex": "O maior roedor do mundo. Calma e sociável, adora ficar na água e se dá bem com quase todo bicho.",
 	},
 	"tatu": {
 		"num": 5, "name": "Tatu-bola", "class": "mamifero", "affinities": ["terra", "fisico"], "base": [45, 42, 68, 30], "exp": 58, "catch": 190,
 		"passive": "bola_blindada",
-		"learn": [[1, "arranhao"], [1, "enrolar"], [7, "investida"], [11, "cavar"], [15, "tremor"]],
+		"learn": [[1, "arranhao"], [1, "enrolar"], [5, "cavar"], [7, "investida"], [15, "tremor"]],
 		"dex": "Tatu-bola. Quando ameaçado, se fecha numa bola perfeita e fica protegido pela carapaça.",
 	},
 	"quati": {
 		"num": 6, "name": "Quati", "class": "mamifero", "affinities": ["fisico"], "base": [45, 52, 40, 58], "exp": 58, "catch": 170,
-		"learn": [[1, "arranhao"], [3, "olhar_feroz"], [7, "mordida"], [12, "ataque_rapido"]],
+		"learn": [[1, "arranhao"], [3, "olhar_feroz"], [5, "mordida"], [12, "ataque_rapido"]],
 		"dex": "Quati. Usa o focinho comprido para fuçar insetos e frutas. Anda com a cauda listrada erguida.",
 	},
 	"tucano": {
 		"num": 7, "name": "Tucano", "class": "ave", "affinities": ["ar", "fisico"], "base": [42, 50, 35, 56], "exp": 58, "catch": 170,
-		"learn": [[1, "bicada"], [4, "olhar_feroz"], [8, "rasante"], [13, "bico_broca"]],
+		"learn": [[1, "bicada"], [4, "olhar_feroz"], [5, "rasante"], [8, "ventania"], [13, "bico_broca"]],
 		"dex": "Tucano-toco. Seu bico enorme é leve e ajuda a controlar a temperatura do corpo.",
 	},
 	"jiboia": {
 		"num": 8, "name": "Jiboia", "class": "reptil", "affinities": ["fisico"], "base": [50, 54, 45, 40], "exp": 60, "catch": 150,
 		"passive": "constritora",
-		"learn": [[1, "bote"], [1, "olhar_feroz"], [8, "constricao"], [13, "enrolar"]],
+		"learn": [[1, "bote"], [1, "olhar_feroz"], [5, "constricao"], [9, "presas"], [13, "enrolar"]],
 		"dex": "Jiboia. Serpente sem veneno que caça por constrição. Sente o calor das presas pelo focinho.",
 	},
 	"sapo": {
 		"num": 9, "name": "Sapo-cururu", "class": "anfibio", "affinities": ["veneno", "agua"], "base": [52, 45, 48, 32], "exp": 56, "catch": 190,
 		"passive": "glandulas",
-		"learn": [[1, "lingua"], [1, "enrijecer"], [7, "toxina"], [12, "salto"]],
+		"learn": [[1, "lingua"], [1, "enrijecer"], [5, "toxina"], [12, "salto"]],
 		"dex": "Sapo-cururu. Grande e robusto. As glândulas atrás da cabeça liberam uma toxina leitosa.",
 	},
 	"perereca": {
 		"num": 10, "name": "Perereca", "class": "anfibio", "affinities": ["agua", "veneno"], "base": [38, 42, 35, 68], "exp": 56, "catch": 190,
-		"learn": [[1, "lingua"], [4, "agilidade"], [6, "bolhas"], [8, "salto"], [12, "toxina"]],
+		"learn": [[1, "lingua"], [4, "agilidade"], [5, "bolhas"], [8, "salto"], [12, "toxina"]],
 		"dex": "Perereca-verde. Tem discos adesivos nos dedos e escala folhas e vidros sem escorregar.",
 	},
 	"besouro": {
 		"num": 11, "name": "Besouro-rino", "class": "inseto", "affinities": ["fisico", "terra"], "base": [45, 58, 62, 25], "exp": 58, "catch": 170,
-		"learn": [[1, "investida"], [1, "enrijecer"], [6, "ferroada"], [11, "chifre"], [15, "tremor"]],
+		"learn": [[1, "investida"], [1, "enrijecer"], [5, "ferroada"], [11, "chifre"], [15, "tremor"]],
 		"dex": "Besouro-rinoceronte. Um dos insetos mais fortes do mundo: levanta muitas vezes o próprio peso.",
 	},
 	"morfo": {
 		"num": 12, "name": "Morfo-azul", "class": "inseto", "affinities": ["ar", "especial"], "base": [36, 38, 35, 64], "exp": 56, "catch": 190,
-		"learn": [[1, "rajada_asas"], [1, "po_asas"], [7, "ataque_rapido"], [12, "agilidade"]],
+		"learn": [[1, "rajada_asas"], [1, "po_asas"], [5, "ataque_rapido"], [9, "ventania"], [12, "agilidade"]],
 		"dex": "Borboleta-morfo-azul. O azul das asas não vem de pigmento, e sim da luz refletida em escamas.",
 	},
 	"caranguejo": {
 		"num": 13, "name": "Caranguejo", "class": "crustaceo", "affinities": ["agua", "fisico"], "base": [42, 56, 58, 34], "exp": 58, "catch": 170,
-		"learn": [[1, "pinca"], [1, "enrijecer"], [4, "bolhas"], [6, "jato"], [9, "carapaca"], [11, "mergulho"]],
+		"learn": [[1, "pinca"], [1, "enrijecer"], [4, "bolhas"], [5, "carapaca"], [6, "jato"], [11, "mergulho"]],
 		"dex": "Caranguejo-uçá. Vive em tocas no manguezal e ajuda a reciclar folhas e nutrientes da lama.",
 	},
 	"aranha": {
 		"num": 14, "name": "Caranguejeira", "class": "aracnideo", "affinities": ["veneno", "fisico"], "base": [44, 56, 46, 44], "exp": 60, "catch": 150,
-		"learn": [[1, "presas"], [1, "teia"], [6, "pelos_urticantes"], [10, "presas_venenosas"], [14, "agilidade"]],
+		"learn": [[1, "presas"], [1, "teia"], [5, "pelos_urticantes"], [10, "presas_venenosas"], [14, "agilidade"]],
 		"dex": "Aranha-caranguejeira. Grande e peluda, caça à noite. Esfrega as patas e solta pelos que irritam a pele.",
 	},
 	"poraque": {
 		"num": 15, "name": "Poraquê", "class": "peixe", "affinities": ["eletrico", "agua"], "base": [50, 60, 40, 48], "exp": 62, "catch": 120,
 		"passive": "orgao_eletrico",
-		"learn": [[1, "presas"], [1, "choque"], [6, "bolhas"], [10, "descarga"], [14, "agilidade"]],
+		"learn": [[1, "presas"], [1, "choque"], [5, "bolhas"], [10, "descarga"], [14, "agilidade"]],
 		"dex": "Poraquê, o peixe-elétrico da Amazônia. Gera descargas de até 600 volts para caçar e se defender.",
 	},
 }
@@ -287,15 +294,28 @@ const ENCOUNTERS := {
 	"brejo": [["sapo", 30, 3, 6], ["perereca", 25, 3, 5], ["jiboia", 18, 4, 7], ["poraque", 12, 4, 6], ["capivara", 10, 4, 6], ["aranha", 5, 4, 6]],
 	"praia": [["caranguejo", 45, 3, 6], ["tucano", 25, 3, 6], ["besouro", 15, 4, 6], ["morfo", 15, 3, 5]],
 	"manguezal": [["caranguejo", 35, 7, 10], ["poraque", 20, 7, 10], ["jiboia", 15, 8, 10], ["perereca", 15, 7, 9], ["aranha", 10, 8, 10], ["jacare", 5, 8, 10]],
+	"serra": [["mico", 22, 10, 13], ["arara", 14, 11, 14], ["quati", 18, 10, 12], ["tucano", 14, 10, 13], ["morfo", 12, 10, 12], ["besouro", 10, 11, 13], ["jiboia", 6, 11, 13], ["aranha", 4, 12, 14]],
 }
 
+## kind: "captura" (catch = multiplicador de captura), "cura" (heal = PS),
+## "recurso" (coletado no mapa, usado no hospital e em missões), "chave" (item da história).
 const ITEMS := {
-	"rede": {"name": "Rede", "desc": "Rede macia para capturar animais selvagens.", "battle_only": true},
-	"fruta": {"name": "Fruta", "desc": "Uma fruta doce. Recupera 20 PS.", "heal": 20},
-	"super_fruta": {"name": "Super Fruta", "desc": "Fruta suculenta. Recupera 50 PS.", "heal": 50},
+	"rede": {"name": "Rede", "kind": "captura", "catch": 1.0, "desc": "Rede macia para capturar animais selvagens.", "battle_only": true},
+	"mega_rede": {"name": "Mega Rede", "kind": "captura", "catch": 2.0, "desc": "Rede reforçada: o dobro de chance de captura.", "battle_only": true},
+	"fruta": {"name": "Fruta", "kind": "cura", "desc": "Uma fruta doce. Recupera 20 PS.", "heal": 20},
+	"super_fruta": {"name": "Super Fruta", "kind": "cura", "desc": "Fruta suculenta. Recupera 50 PS.", "heal": 50},
+	"folha_medicinal": {"name": "Folha Medicinal", "kind": "recurso", "desc": "Folha de erva-cidreira. A enfermeira usa em tratamentos."},
+	"flor_ipe": {"name": "Flor de Ipê", "kind": "recurso", "desc": "Flor amarela de ipê. Acalma animais assustados."},
+	"mel_silvestre": {"name": "Mel Silvestre", "kind": "recurso", "desc": "Mel de abelhas nativas sem ferrão. Cicatriza feridas."},
+	"concha": {"name": "Concha Madrepérola", "kind": "recurso", "desc": "Concha brilhante da praia, usada em pomadas."},
+	"pena_colorida": {"name": "Pena Colorida", "kind": "recurso", "desc": "Pena caída de uma ave do campo."},
+	"carteira": {"name": "Carteira de Aventureiro", "kind": "chave", "desc": "Prova que você é um aventureiro da Guilda da Ilha Sapê."},
 }
 
-const ITEM_ORDER := ["rede", "fruta", "super_fruta"]
+const ITEM_ORDER := ["rede", "mega_rede", "fruta", "super_fruta", "folha_medicinal", "flor_ipe", "mel_silvestre", "concha", "pena_colorida", "carteira"]
+
+## Recursos que o hospital pode pedir (todos coletáveis no mapa sem batalhar).
+const REVIVAL_RESOURCES := ["folha_medicinal", "flor_ipe", "mel_silvestre", "concha", "pena_colorida"]
 
 
 ## Multiplicador de dano do elemento contra a classe (e as afinidades) do defensor.

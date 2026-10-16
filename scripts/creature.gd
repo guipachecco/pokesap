@@ -16,12 +16,18 @@ var statuses := {}
 var cooldowns := {}
 ## Nome especial (chefes da história); vazio = nome da espécie. Não é salvo.
 var nickname := ""
+## Identificador fixo (salvo): usado pelo hospital e pela mutação para achar o animal.
+var uid := ""
+## Dados de mutante ({} = não é mutante): {"name", "from": [espécies], "affinity", "stat_mult"}.
+## As cores do mutante vêm da afinidade nova (Mutation.color_of).
+var mutant := {}
 
 
 static func create(species_id: String, lvl: int) -> Creature:
 	var c := Creature.new()
 	c.species = species_id
 	c.level = lvl
+	c.uid = new_uid()
 	c.exp = exp_for_level(lvl)
 	c.recalc_stats()
 	c.hp = c.stats.hp
@@ -43,7 +49,9 @@ func data() -> Dictionary:
 
 
 func display_name() -> String:
-	return nickname if nickname != "" else data().name
+	if nickname != "":
+		return nickname
+	return mutant.get("name", data().name)
 
 
 ## Classe biológica (mamifero, ave, reptil...).
@@ -57,7 +65,18 @@ func type() -> String:
 
 
 func affinities() -> Array:
-	return data().get("affinities", [])
+	var a: Array = data().get("affinities", []).duplicate()
+	if mutant.has("affinity") and not mutant.affinity in a:
+		a.append(mutant.affinity)
+	return a
+
+
+func is_mutant() -> bool:
+	return not mutant.is_empty()
+
+
+static func new_uid() -> String:
+	return "%x%x" % [Time.get_ticks_usec(), randi()]
 
 
 func passives() -> Array:
@@ -82,6 +101,9 @@ func recalc_stats() -> void:
 	stats.atk = int(b[1] * 2 * level / 100.0) + 5
 	stats.def = int(b[2] * 2 * level / 100.0) + 5
 	stats.spd = int(b[3] * 2 * level / 100.0) + 5
+	if mutant.has("stat_mult"):
+		for k in stats:
+			stats[k] = int(stats[k] * float(mutant.stat_mult))
 
 
 func knows(move_id: String) -> bool:
@@ -148,7 +170,10 @@ func gain_exp(amount: int) -> Array:
 
 
 func to_dict() -> Dictionary:
-	return {"species": species, "level": level, "exp": exp, "hp": hp, "moves": moves.duplicate(true)}
+	var d := {"species": species, "level": level, "exp": exp, "hp": hp, "moves": moves.duplicate(true), "uid": uid}
+	if is_mutant():
+		d["mutant"] = mutant.duplicate(true)
+	return d
 
 
 static func from_dict(d: Dictionary) -> Creature:
@@ -156,6 +181,12 @@ static func from_dict(d: Dictionary) -> Creature:
 	c.species = d.species
 	c.level = int(d.level)
 	c.exp = int(d.exp)
+	c.uid = str(d.get("uid", ""))
+	if c.uid == "":
+		c.uid = new_uid()  # saves antigos: ganha um identificador agora
+	var mu = d.get("mutant", {})
+	if typeof(mu) == TYPE_DICTIONARY:
+		c.mutant = mu
 	c.recalc_stats()
 	c.hp = int(d.hp)
 	for m in d.moves:

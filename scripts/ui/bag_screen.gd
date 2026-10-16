@@ -8,6 +8,10 @@ var _big: TextureRect
 var _name: Label
 var _ids: Array = []
 var _t := 0.0
+var _kz: Label
+var _kind: Label
+
+const KIND_NAMES := {"captura": "CAPTURA", "cura": "CURA", "recurso": "RECURSO (HOSPITAL E MISSÕES)", "chave": "ITEM DA HISTÓRIA"}
 
 
 func _init() -> void:
@@ -47,6 +51,11 @@ func _init() -> void:
 	_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_desc.size = Vector2(440, 76)
 	dp.add_child(_desc)
+	_kind = UI.label("", Vector2(12, 80), UI.SMALL, UI.TEXT_MUTED, 300)
+	dp.add_child(_kind)
+	dp.add_child(UI.sprite_rect(Icons.geral("kwanza", 16), Vector2(330, 76)))
+	_kz = UI.label("", Vector2(350, 80), UI.SMALL, UI.TEXT, 100)
+	dp.add_child(_kz)
 	add_child(dp)
 
 
@@ -61,7 +70,9 @@ func _on_moved(i: int) -> void:
 		_big.texture = Art.icon(_ids[i], 64) if _ids[i] != "rede" else Art.icon("rede", 64)
 		_big.show()
 		_name.text = DB.ITEMS[_ids[i]].name
+		_kind.text = KIND_NAMES.get(DB.ITEMS[_ids[i]].get("kind", ""), "")
 	else:
+		_kind.text = ""
 		_desc.text = "Fechar a mochila."
 		_big.hide()
 		_name.text = ""
@@ -69,6 +80,7 @@ func _on_moved(i: int) -> void:
 
 func pick() -> String:
 	show()
+	_kz.text = Economy.fmt(Game.kwanzas)
 	_ids = []
 	var labels := []
 	var icons := []

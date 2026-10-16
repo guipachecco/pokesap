@@ -70,7 +70,7 @@ func _on_move(i: int) -> void:
 			_info.text = "Nenhuma aventura salva ainda."
 		else:
 			var mins := int(_summary.time / 60.0)
-			_info.text = "%s  ·  %s Nv %d  ·  %dh%02d  ·  %d vistos" % [_summary.region, _summary.lead, _summary.level, mins / 60, mins % 60, _summary.seen]
+			_info.text = "%s  ·  Aventureiro Nv %d  ·  %s Nv %d  ·  %dh%02d" % [_summary.region, _summary.get("player_level", 1), _summary.lead, _summary.level, mins / 60, mins % 60]
 	else:
 		_info.text = ""
 

@@ -95,13 +95,21 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 
-## Clique com o botão esquerdo em qualquer parte da caixa: mostra o texto inteiro
-## (se ainda estiver aparecendo) ou passa para a próxima fala. O clique é consumido
-## aqui, então um clique só avança uma fala e não chega aos outros elementos.
-func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not event.is_echo():
-		_advance_or_reveal()
-		accept_event()
+## Clique com o botão esquerdo em QUALQUER parte da tela (dentro ou fora da caixa):
+## o primeiro mostra o texto inteiro (se ainda estiver aparecendo), o próximo passa
+## para a fala seguinte e o da última fala fecha o diálogo. Cliques em cima de um menu
+## de opções ativo (SIM/NÃO, lutar, loja...) ficam com o menu e não avançam nada.
+## O clique usado aqui é consumido (set_input_as_handled), então um clique faz uma
+## coisa só e não chega aos botões ou ao mapa que estão atrás.
+func _input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton) or event.button_index != MOUSE_BUTTON_LEFT or not event.pressed:
+		return
+	if not is_visible_in_tree() or not (typing or waiting):
+		return
+	if ChoiceMenu.menu_at(event.position):
+		return
+	if _advance_or_reveal():
+		get_viewport().set_input_as_handled()
 
 
 ## Retorna true se a ação foi usada (revelar o texto ou avançar a fala).

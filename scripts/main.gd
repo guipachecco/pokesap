@@ -33,8 +33,20 @@ func _self_check() -> void:
 		if m.w == 0 or WorldArt.ground(m, 0).get_width() != m.w * 16:
 			problems.append("mapa " + r)
 	for c in DB.CLASSES:
-		if Art.class_icon(c).get_width() != 32:
+		if Art.class_icon(c).get_width() != 32 or Icons.classe(c, 16).get_width() != 16:
 			problems.append("ícone " + c)
+	for it in DB.ITEMS:
+		if Icons.item(it).get_width() != 32:
+			problems.append("ícone do item " + it)
+	for st in DB.STATUSES:
+		if Icons.estado(st).get_width() != 32:
+			problems.append("ícone do estado " + st)
+	for h in ["casa", "hospital", "mercado", "guilda"]:
+		if WorldArt.house(h).get_width() != WorldArt.HOUSE_W:
+			problems.append("casa " + h)
+	for t in Trainers.DATA:
+		if Trainers.team(t).is_empty():
+			problems.append("aventureiro " + t)
 	for z in DB.ENCOUNTERS:
 		if Art.battle_bg(z).get_width() != 240:
 			problems.append("fundo " + z)
@@ -61,7 +73,7 @@ func _self_check() -> void:
 		Settings.restore(before)
 		Settings.apply_display()
 		Settings.changed.emit()
-	print("VERIFICACAO: %s" %("OK - %d animais, %d regiões" % [DB.SPECIES.size(), Regions.DATA.size()] if problems.is_empty() else "FALHOU: " + ", ".join(PackedStringArray(problems))))
+	print("VERIFICACAO: %s" %("OK - %d animais, %d regiões, %d salas" % [DB.SPECIES.size(), Regions.world_ids().size(), Regions.DATA.size() - Regions.world_ids().size()] if problems.is_empty() else "FALHOU: " + ", ".join(PackedStringArray(problems))))
 	get_tree().quit(0 if problems.is_empty() else 1)
 
 

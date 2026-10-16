@@ -13,9 +13,14 @@ shader_type canvas_item;
 uniform vec4 flash_color : source_color = vec4(1.0);
 uniform float flash = 0.0;
 uniform vec4 tint : source_color = vec4(1.0);
+uniform vec4 mut_color : source_color = vec4(1.0);
+uniform float mut_mix = 0.0;
 void fragment() {
 	vec4 c = texture(TEXTURE, UV);
-	vec3 rgb = mix(c.rgb * tint.rgb, flash_color.rgb, flash);
+	// mutante: as cores puxam para a cor do elemento novo, mantendo luz e sombra
+	float lum = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+	vec3 base = mix(c.rgb, clamp(mut_color.rgb * (0.45 + lum * 1.4), 0.0, 1.0), mut_mix);
+	vec3 rgb = mix(base * tint.rgb, flash_color.rgb, flash);
 	COLOR = vec4(rgb, c.a) * COLOR;
 }
 """
@@ -64,8 +69,10 @@ func _init() -> void:
 	add_child(status_fx)
 
 
-func set_species(id: String, right := false) -> void:
+func set_species(id: String, right := false, mut := Color.WHITE, mut_mix := 0.0) -> void:
 	species = id
+	_mat.set_shader_parameter("mut_color", mut)
+	_mat.set_shader_parameter("mut_mix", mut_mix)
 	facing_right = right
 	body.flip_h = right
 	overlay.flip_h = right
@@ -181,6 +188,14 @@ func flash(col := Color.WHITE, times := 2) -> void:
 		await get_tree().create_timer(0.05).timeout
 		_mat.set_shader_parameter("flash", 0.0)
 		await get_tree().create_timer(0.06).timeout
+
+
+## Animal: espécie, lado e cores de mutante (se for).
+func set_creature(c: Creature, right := false) -> void:
+	if c.is_mutant():
+		set_species(c.species, right, Mutation.color_of(c), Mutation.COLOR_MIX)
+	else:
+		set_species(c.species, right)
 
 
 func set_tint(c: Color) -> void:

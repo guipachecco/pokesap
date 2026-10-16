@@ -46,7 +46,7 @@ func refresh() -> void:
 			shadow.draw_rect(Rect2(10, 58, 48, 4), Color(0, 0, 0, 0.18))
 			shadow.draw_rect(Rect2(14, 57, 40, 6), Color(0, 0, 0, 0.18)))
 		p.add_child(shadow)
-		var spr := UI.sprite_rect(Art.animal(c.species), Vector2(2, -2), 1, true)
+		var spr := UI.sprite_rect(Icons.portrait(c), Vector2(2, -2), 1, true)
 		p.add_child(spr)
 		_sprites.append(spr)
 		p.add_child(UI.label(c.display_name(), Vector2(72, 4), UI.NORMAL))
@@ -60,6 +60,10 @@ func refresh() -> void:
 		bar.ratio = float(c.hp) / c.stats.hp
 		p.add_child(bar)
 		p.add_child(UI.label("%d/%d" % [c.hp, c.stats.hp], Vector2(82, 44), UI.SMALL, UI.TEXT_MUTED))
+		# classe, afinidades e mutante (ícones pequenos no canto do cartão)
+		var icons := Icons.of_creature(c, 16)
+		for k in icons.size():
+			p.add_child(UI.sprite_rect(icons[k], Vector2(222 - (icons.size() - k) * 17, 6)))
 		if c.is_fainted():
 			spr.modulate = Color(0.45, 0.45, 0.5)
 			var tag := UI.panel(Rect2(120, 44, 100, 18), UI.RED, UI.INK)

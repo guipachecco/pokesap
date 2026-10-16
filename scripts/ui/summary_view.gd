@@ -36,13 +36,16 @@ func _init(c: Creature) -> void:
 		ground.draw_rect(Rect2(3, 100, 146, 2), Color("a8e488"))
 		ground.draw_rect(Rect2(28, 128, 96, 6), Color("6cba4e")))
 	frame.add_child(ground)
-	_spr = UI.sprite_rect(Art.animal(c.species), Vector2(12, 6), 2, true)
+	_spr = UI.sprite_rect(Icons.portrait(c), Vector2(12, 6), 2, true)
 	frame.add_child(_spr)
 	add_child(frame)
 	add_child(UI.class_badge(c.klass(), Vector2(14, 202)))
-	# afinidades (elementos naturais do animal)
-	for i in c.affinities().size():
-		add_child(UI.sprite_rect(Art.element_icon(c.affinities()[i], 16), Vector2(14 + i * 18, 234)))
+	# classe, afinidades (elementos naturais) e a marca de mutante: classificações separadas
+	var row := Icons.of_creature(c, 16)
+	for i in row.size():
+		add_child(UI.sprite_rect(row[i], Vector2(14 + i * 18, 234)))
+	if c.is_mutant():
+		add_child(UI.label("MUTANTE", Vector2(16 + row.size() * 18, 236), UI.SMALL, Color("8a50c0")))
 
 	# atributos
 	var info := UI.panel(Rect2(166, 44, 306, 96))

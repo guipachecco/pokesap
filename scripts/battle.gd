@@ -6,6 +6,8 @@ extends CanvasLayer
 ## aplicado no quadro de impacto (ou quando o projétil chega ao alvo).
 
 signal finished(result: String)  # "win", "lose", "run", "caught"
+## Batalha contra aventureiro: opts {"trainer": id, "team": [Creature], "trainer_name"}.
+## Os animais dele entram um depois do outro; não dá para fugir nem capturar.
 
 const ENEMY_POS := Vector2(352, 146)
 const PLAYER_POS := Vector2(128, 250)
@@ -16,6 +18,10 @@ var zone := "campo"
 var participants: Array[Creature] = []
 var run_attempts := 0
 var opts := {}            # {"boss": true, "title": "..."} em batalhas da história
+var team: Array = []      # animais do aventureiro (o primeiro é o enemy)
+var team_index := 0
+var enemy_mut: TextureRect
+var mine_mut: TextureRect
 var _attacked := {}      # quem já deu o primeiro golpe de dano (Emboscada)
 var _acted := {}         # quem já agiu neste turno (Empurrão)
 var _stun_guard := {}    # turnos de imunidade a atordoar
@@ -76,9 +82,10 @@ static func calc_damage(user: Creature, target: Creature, move_id: String, crit:
 	return {"damage": maxi(1, int(dmg)), "eff": eff}
 
 
-static func capture_chance(target: Creature) -> float:
+## mult: força da rede (Rede 1.0, Mega Rede 2.0).
+static func capture_chance(target: Creature, mult := 1.0) -> float:
 	var max_hp: float = target.stats.hp
-	var a: float = (3.0 * max_hp - 2.0 * target.hp) * target.data().catch / (3.0 * max_hp)
+	var a: float = (3.0 * max_hp - 2.0 * target.hp) * target.data().catch * mult / (3.0 * max_hp)
 	return clampf(a / 255.0, 0.02, 1.0)
 
 
@@ -140,6 +147,8 @@ func _ready() -> void:
 	enemy_box = UI.panel(Rect2(10, 10, 214, 56))
 	enemy_icon = UI.sprite_rect(Art.class_icon("mamifero"), Vector2(4, 11))
 	enemy_box.add_child(enemy_icon)
+	enemy_mut = UI.sprite_rect(Icons.mutante(16), Vector2(22, 32))
+	enemy_box.add_child(enemy_mut)
 	enemy_name = UI.label("", Vector2(40, 4), UI.NORMAL)
 	enemy_box.add_child(enemy_name)
 	var elv := UI.panel(Rect2(162, 6, 46, 18), UI.ACCENT, UI.INK)
@@ -159,6 +168,8 @@ func _ready() -> void:
 	mine_box = UI.panel(Rect2(256, 158, 218, 80))
 	mine_icon = UI.sprite_rect(Art.class_icon("mamifero"), Vector2(4, 8))
 	mine_box.add_child(mine_icon)
+	mine_mut = UI.sprite_rect(Icons.mutante(16), Vector2(22, 28))
+	mine_box.add_child(mine_mut)
 	mine_name = UI.label("", Vector2(40, 4), UI.NORMAL)
 	mine_box.add_child(mine_name)
 	var mlv := UI.panel(Rect2(166, 6, 46, 18), UI.ACCENT, UI.INK)
@@ -252,19 +263,30 @@ func _popup(text: String, at: Vector2, color: Color) -> void:
 
 func _refresh_enemy_box() -> void:
 	enemy_name.text = enemy.display_name()
+	_fit_name(enemy_name, 118)
 	enemy_lvl.text = "Nv%d" % enemy.level
 	enemy_bar.ratio = float(enemy.hp) / enemy.stats.hp
 	enemy_icon.texture = Art.class_icon(enemy.klass())
+	enemy_mut.visible = enemy.is_mutant()
 
 
 func _refresh_mine_box() -> void:
 	mine_name.text = mine.display_name()
+	_fit_name(mine_name, 122)
 	mine_lvl.text = "Nv%d" % mine.level
 	mine_bar.ratio = float(mine.hp) / mine.stats.hp
 	mine_hp_text.text = "%d/%d" % [mine.hp, mine.stats.hp]
 	mine_exp.ratio = mine.exp_fraction()
 	mine_icon.texture = Art.class_icon(mine.klass())
+	mine_mut.visible = mine.is_mutant()
 	_refresh_status(mine)
+
+
+## Nomes compridos (mutantes, chefes) usam a fonte pequena para não cobrir o nível.
+func _fit_name(l: Label, w: float) -> void:
+	var big := UI.text_width(l.text, UI.NORMAL) <= w
+	l.add_theme_font_size_override("font_size", UI.NORMAL if big else UI.SMALL)
+	l.position.y = 4 if big else 10
 
 
 func _view(c: Creature) -> CreatureView:
@@ -278,6 +300,8 @@ func prepare(wild: Creature, zone_id: String, options := {}) -> void:
 	opts = options
 	if opts.has("title"):
 		wild.nickname = opts.title
+	team = opts.get("team", [wild])
+	team_index = 0
 	enemy = wild
 	zone = zone_id
 	bg.texture = Art.battle_bg(zone)
@@ -286,8 +310,8 @@ func prepare(wild: Creature, zone_id: String, options := {}) -> void:
 	participants = [mine]
 	enemy.reset_stages()
 	mine.reset_stages()
-	enemy_spr.set_species(enemy.species)
-	mine_spr.set_species(mine.species, true)
+	enemy_spr.set_creature(enemy)
+	mine_spr.set_creature(mine, true)
 	enemy_spr.position = ENEMY_POS
 	mine_spr.position = PLAYER_POS
 	_refresh_enemy_box()
@@ -309,7 +333,11 @@ func start(wild: Creature, zone_id: String, options := {}) -> void:
 	# vira para o jogador ao aparecer, depois assume a pose de batalha
 	enemy_spr.play("front")
 	enemy_box.show()
-	await msg.say(("%s bloqueia o caminho!" if opts.get("boss", false) else "%s selvagem apareceu!") % enemy.display_name())
+	if is_trainer():
+		await msg.say("%s quer batalhar!" % opts.get("trainer_name", "Aventureiro"))
+		await msg.say("%s mandou %s!" % [opts.get("trainer_name", ""), enemy.display_name()])
+	else:
+		await msg.say(("%s bloqueia o caminho!" if opts.get("boss", false) else "%s selvagem apareceu!") % enemy.display_name())
 	enemy_spr.play("idle")
 	await _send_out(mine)
 	await _battle_loop()
@@ -320,7 +348,7 @@ func _send_out(c: Creature) -> void:
 	if not participants.has(c):
 		participants.append(c)
 	c.reset_stages()
-	mine_spr.set_species(c.species, true)
+	mine_spr.set_creature(c, true)
 	mine_spr.modulate = Color.WHITE
 	mine_spr.scale = Vector2(2, 2)
 	_refresh_mine_box()
@@ -372,7 +400,7 @@ func _choose_action() -> Dictionary:
 				if sw >= 0:
 					return {"kind": "switch", "idx": sw}
 			3:
-				if opts.get("boss", false):
+				if opts.get("boss", false) or is_trainer():
 					await msg.say("Não dá para fugir desta batalha!")
 					continue
 				if _trapped(mine):
@@ -380,6 +408,10 @@ func _choose_action() -> Dictionary:
 					continue
 				return {"kind": "run"}
 	return {}
+
+
+func is_trainer() -> bool:
+	return opts.has("trainer")
 
 
 func _trapped(c: Creature) -> bool:
@@ -445,11 +477,17 @@ func _choose_item() -> Dictionary:
 		if id == "":
 			return {}
 		var item: Dictionary = DB.ITEMS[id]
-		if id == "rede":
+		if item.get("kind", "") == "captura":
 			if opts.get("boss", false):
 				await msg.say("Este animal não pode ser capturado!")
 				continue
+			if is_trainer():
+				await msg.say("Não dá para capturar o animal de outro aventureiro!")
+				continue
 			return {"kind": "item", "id": id}
+		if not item.has("heal"):
+			await msg.say("Não dá para usar %s numa batalha." % item.name)
+			continue
 		if item.has("heal"):
 			party_screen.show()
 			var t := await party_screen.pick("Usar %s em qual animal?" % item.name)
@@ -457,7 +495,10 @@ func _choose_item() -> Dictionary:
 			if t < 0:
 				continue
 			var c: Creature = Game.party[t]
-			if c.is_fainted() or c.hp >= c.stats.hp:
+			if c.is_fainted():
+				await msg.say("%s está desmaiado: só o hospital reanima." % c.display_name())
+				continue
+			if c.hp >= c.stats.hp:
 				await msg.say("Não vai ter efeito.")
 				continue
 			return {"kind": "item", "id": id, "target": t}
@@ -507,7 +548,7 @@ func _run_turn(action: Dictionary) -> String:
 			if _try_run():
 				await msg.say("Você fugiu em segurança!", false)
 				# o animal vira e sai correndo
-				mine_spr.set_species(mine.species, false)
+				mine_spr.set_creature(mine, false)
 				mine_spr.play("walk")
 				var tw := create_tween()
 				tw.tween_property(mine_spr, "position", PLAYER_POS + Vector2(-260, 0), 0.5)
@@ -523,9 +564,9 @@ func _run_turn(action: Dictionary) -> String:
 			mine_box.hide()
 			await _send_out(Game.party[action.idx])
 		"item":
-			if action.id == "rede":
-				Game.use_item("rede")
-				if await _throw_net():
+			if DB.ITEMS[action.id].get("kind", "") == "captura":
+				Game.use_item(action.id)
+				if await _throw_net(action.id):
 					return "caught"
 			else:
 				var c: Creature = Game.party[action.target]
@@ -645,6 +686,8 @@ func _enemy_pick_move() -> String:
 func _who(c: Creature) -> String:
 	if c == mine or opts.get("boss", false):
 		return c.display_name()
+	if is_trainer():
+		return "%s de %s" % [c.display_name(), opts.get("trainer_name", "")]
 	return "%s selvagem" % c.display_name()
 
 
@@ -933,8 +976,16 @@ func _check_faints() -> String:
 	if enemy.is_fainted():
 		await _faint_anim(enemy_spr)
 		enemy_box.hide()
-		await msg.say(("%s desistiu da luta!" if opts.get("boss", false) else "%s selvagem desmaiou!") % enemy.display_name())
+		if is_trainer():
+			await msg.say("%s desmaiou!" % _who(enemy))
+		else:
+			await msg.say(("%s desistiu da luta!" if opts.get("boss", false) else "%s selvagem desmaiou!") % enemy.display_name())
+		Game.emit_event("defeat", {"species": enemy.species, "level": enemy.level, "region": Game.region,
+			"wild": not is_trainer() and not opts.get("boss", false), "trainer": opts.get("trainer", "")})
 		await _give_exp()
+		if is_trainer() and team_index + 1 < team.size():
+			await _next_trainer_creature()
+			return ""
 		return "win"
 	if mine.is_fainted():
 		await _faint_anim(mine_spr)
@@ -947,6 +998,29 @@ func _check_faints() -> String:
 		var i := await _choose_switch(true)
 		await _send_out(Game.party[i])
 	return ""
+
+
+## O aventureiro manda o próximo animal da equipe.
+func _next_trainer_creature() -> void:
+	team_index += 1
+	enemy = team[team_index]
+	enemy.reset_stages()
+	Game.seen[enemy.species] = true
+	await msg.say("%s vai mandar %s!" % [opts.get("trainer_name", ""), enemy.display_name()])
+	enemy_spr.set_creature(enemy)
+	enemy_spr.modulate = Color.WHITE
+	enemy_spr.scale = Vector2(2, 2)
+	enemy_spr.position = ENEMY_POS + Vector2(240, 0)
+	enemy_spr.show()
+	enemy_spr.play("walk")
+	var tw := create_tween()
+	tw.tween_property(enemy_spr, "position", ENEMY_POS, 0.7)
+	await tw.finished
+	enemy_spr.play("idle")
+	_refresh_enemy_box()
+	_refresh_status(enemy)
+	enemy_box.show()
+	_attacked.erase(enemy)
 
 
 func _give_exp() -> void:
@@ -977,6 +1051,7 @@ func _give_exp() -> void:
 					_refresh_mine_box()
 					mine_exp.ratio = 0.0
 				await msg.say("%s subiu para o nível %d!" % [c.display_name(), ev.level])
+				Game.emit_event("creature_level", {"species": c.species, "level": ev.level})
 			elif ev.has("learn"):
 				await _learn_move(c, ev.learn)
 		if c == mine and not events.is_empty():
@@ -987,11 +1062,18 @@ func _give_exp() -> void:
 			_refresh_mine_box()
 
 
+## Golpe novo ao subir de nível (no nível 5 todos aprendem um): mostra a ficha do golpe
+## (elemento, poder, precisão, PP, contato e descrição). Com 4 golpes, o jogador
+## escolhe qual esquecer, vendo a ficha de cada um; nada é apagado sem confirmação.
 func _learn_move(c: Creature, move_id: String) -> void:
 	var mname: String = DB.MOVES[move_id].name
+	var card := _move_card(move_id, "GOLPE NOVO!")
+	add_child(card)
 	if c.moves.size() < 4:
 		c.moves.append({"id": move_id, "pp": DB.MOVES[move_id].pp})
 		await msg.say("%s aprendeu %s!" % [c.display_name(), mname])
+		card.queue_free()
+		Game.emit_event("learn_move", {"species": c.species, "move": move_id})
 		return
 	await msg.say("%s quer aprender %s, mas já conhece 4 golpes." % [c.display_name(), mname])
 	while true:
@@ -1007,20 +1089,59 @@ func _learn_move(c: Creature, move_id: String) -> void:
 				names.append(DB.MOVES[m.id].name)
 			var fm := ChoiceMenu.new(Rect2(270, 120, 206, 120), names)
 			add_child(fm)
+			var old_card: Array = [null]
+			fm.moved.connect(func(i: int):
+				if old_card[0]:
+					old_card[0].queue_free()
+				if i >= 0 and i < c.moves.size():
+					old_card[0] = _move_card(c.moves[i].id, "ESQUECER?", Vector2(8, 120))
+					add_child(old_card[0]))
 			var f := await fm.choose()
 			fm.queue_free()
+			if old_card[0]:
+				old_card[0].queue_free()
 			if f >= 0:
 				var old: String = DB.MOVES[c.moves[f].id].name
+				await msg.say("Esquecer %s e aprender %s?" % [old, mname], false)
+				var ok := ChoiceMenu.new(Rect2(380, 168, 90, 70), ["SIM", "NÃO"])
+				add_child(ok)
+				var conf := await ok.choose()
+				ok.queue_free()
+				if conf != 0:
+					continue
 				c.moves[f] = {"id": move_id, "pp": DB.MOVES[move_id].pp}
 				await msg.say("1, 2 e... Pronto! %s esqueceu %s e aprendeu %s!" % [c.display_name(), old, mname])
+				card.queue_free()
+				Game.emit_event("learn_move", {"species": c.species, "move": move_id})
 				return
 		else:
 			await msg.say("%s não aprendeu %s." % [c.display_name(), mname])
+			card.queue_free()
 			return
 
 
-func _throw_net() -> bool:
-	await msg.say("Você jogou uma Rede!", false)
+## Ficha de um golpe (para a hora de aprender ou esquecer).
+func _move_card(move_id: String, title: String, pos := Vector2(8, 8)) -> Panel:
+	var m: Dictionary = DB.MOVES[move_id]
+	var ecol: Color = DB.ELEMENTS[m.element].color
+	var p := UI.panel(Rect2(pos, Vector2(250, 104)), ecol.lightened(0.7), ecol.darkened(0.45))
+	p.add_child(UI.label(title, Vector2(10, 6), UI.SMALL, ecol.darkened(0.5)))
+	p.add_child(UI.label(m.name, Vector2(10, 18), UI.NORMAL))
+	p.add_child(UI.element_badge(m.element, Vector2(150, 4)))
+	var kind := "CONTATO" if m.get("contact", false) else ("DISTÂNCIA" if m.power > 0 else "EFEITO")
+	var pw := "--" if m.power == 0 else str(m.power)
+	p.add_child(UI.label("PODER %s  PRECISÃO %d  PP %d  %s" % [pw, int(m.acc), int(m.pp), kind], Vector2(10, 44), UI.SMALL, UI.TEXT))
+	var d := UI.label(m.get("desc", ""), Vector2(10, 58), UI.SMALL, UI.TEXT_MUTED, 230)
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	d.size = Vector2(230, 40)
+	p.add_child(d)
+	return p
+
+
+func _throw_net(item_id := "rede") -> bool:
+	var item: Dictionary = DB.ITEMS[item_id]
+	await msg.say("Você jogou uma %s!" % item.name, false)
+	net_spr.texture = Art.icon(item_id)
 	net_spr.show()
 	net_spr.rotation = 0
 	net_spr.position = Vector2(120, 260)
@@ -1039,7 +1160,7 @@ func _throw_net() -> bool:
 	tw3.tween_property(net_spr, "position", ENEMY_POS + Vector2(0, -12), 0.3).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 	await tw3.finished
 
-	var p := capture_chance(enemy)
+	var p := capture_chance(enemy, float(item.get("catch", 1.0)))
 	var shake_p := pow(p, 0.25)
 	var shakes := 0
 	while shakes < 3 and randf() < shake_p:
@@ -1064,6 +1185,10 @@ func _throw_net() -> bool:
 			await msg.say("Os dados de %s foram adicionados ao Registro." % cname)
 		if not to_party:
 			await msg.say("Sua equipe está cheia. %s foi enviado para a reserva." % cname)
+		var xp := Progression.XP_CATCH_PER_LEVEL * enemy.level + (Progression.XP_NEW_SPECIES if new_entry else 0)
+		await msg.say("Você ganhou %d XP de aventureiro!" % xp)
+		Progression.add_xp(xp, "captura")
+		Game.emit_event("catch", {"species": enemy.species, "level": enemy.level, "new": new_entry})
 		return true
 	net_spr.hide()
 	var tw4 := create_tween()
@@ -1104,6 +1229,14 @@ func _faint_anim(v: CreatureView) -> void:
 
 
 func _end(result: String) -> void:
+	# vitória contra animal selvagem: XP de aventureiro e alguns kwanzas (os aventureiros
+	# e as missões pagam as recompensas próprias depois da batalha)
+	if result == "win" and not is_trainer() and not opts.get("boss", false):
+		var xp := Progression.XP_WILD_PER_LEVEL * enemy.level
+		var kz := Economy.WILD_PER_LEVEL * enemy.level
+		await msg.say("Você ganhou %d XP de aventureiro e %s!" % [xp, Economy.fmt(kz)])
+		Progression.add_xp(xp, "batalha")
+		Economy.earn(kz, "batalha")
 	for c in Game.party:
 		c.reset_stages()
 	finished.emit(result)

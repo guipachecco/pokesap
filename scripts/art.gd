@@ -170,6 +170,30 @@ const PEOPLE := {
 	# Iara, guarda-parque: boné verde-oliva e farda cáqui
 	"guarda": {"r": "5a6a3a", "R": "3e4a28", "w": "e8d04a", "h": "2a1a12", "s": "c88a5a", "e": "202838", "m": "9a5040",
 		"b": "b8a46a", "B": "96844e", "a": "a89458", "c": "4a5a2a", "g": "6a7a3a", "G": "4e5a2a", "p": "5a5a3a", "k": "2a2218"},
+	# Rafa, aventureira aprendiz (rival): boné laranja e colete vermelho
+	"rafa": {"r": "f08a24", "R": "c0681a", "w": "fff0c0", "h": "2a1a12", "s": "d89a68", "e": "202838", "m": "b06050",
+		"b": "d84a3a", "B": "a83428", "a": "c8443a", "c": "f8e8c8", "g": "3a5aa0", "G": "2a4480", "p": "3a3a4a", "k": "2a2a2a"},
+	# Nina, pesquisadora: chapéu de explorador e camisa turquesa
+	"nina": {"r": "c8b078", "R": "a08a58", "w": "e8d8a8", "h": "6a3a1a", "s": "f0c8a0", "e": "202838", "m": "c87870",
+		"b": "3ab0a8", "B": "2a8a84", "a": "34a09a", "c": "f8f8f8", "g": "8a7a5a", "G": "6a5a40", "p": "5a4a3a", "k": "3a2a20"},
+	# Caio, aventureiro da serra: chapéu marrom e jaqueta verde-musgo
+	"caio": {"r": "7a4a26", "R": "5a3418", "w": "a87040", "h": "1a1410", "s": "b8784a", "e": "202838", "m": "8a4838",
+		"b": "4a6a3a", "B": "34502a", "a": "426034", "c": "e8d8b8", "g": "5a4a3a", "G": "3e3226", "p": "3a3028", "k": "201810"},
+	# Enfermeira Clara: touca branca com cruz e uniforme rosa
+	"enfermeira": {"r": "f8f8f8", "R": "d8d8e0", "w": "e04848", "h": "8a4a20", "s": "f8d0a8", "e": "202838", "m": "e07878",
+		"b": "f8a8c0", "B": "e088a8", "a": "f4b8c8", "c": "ffffff", "g": "f8f8f8", "G": "d8d8e0", "p": "f0f0f0", "k": "e8a0b8"},
+	# Dra. Flora, cientista: cabelo roxo e jaleco
+	"cientista": {"r": "8a50c0", "R": "6a3aa0", "w": "a070e0", "h": "8a50c0", "s": "f0c090", "e": "202838", "m": "c87860",
+		"b": "f4f4f8", "B": "d0d0dc", "a": "e8e8f0", "c": "60c0d8", "g": "5a5a7a", "G": "40405a", "p": "3a3a58", "k": "2a2a3a"},
+	# Mestre Bento, da Guilda: cabelo grisalho e túnica azul-escura
+	"mestre": {"r": "c8c8c8", "R": "a8a8a8", "w": "d8d8d8", "h": "c8c8c8", "s": "c88a5a", "e": "202838", "m": "8a5040",
+		"b": "2a3a7a", "B": "1e2a5a", "a": "26346c", "c": "f0c040", "g": "6a4a2a", "G": "4a3018", "p": "3a2a20", "k": "2a1a10"},
+	# Dona Cida, do mercado: lenço amarelo e avental verde
+	"lojista": {"r": "f8d040", "R": "d8a820", "w": "f8e070", "h": "4a2a1a", "s": "c88a5a", "e": "202838", "m": "a05040",
+		"b": "62a84a", "B": "4a8a38", "a": "e8a070", "c": "f8f8f8", "g": "8a5a3a", "G": "6a4028", "p": "5a3a2a", "k": "3a2a20"},
+	# Estudante (colega de escola): boné azul e camiseta amarela
+	"aluno": {"r": "3a70d8", "R": "2a58b0", "w": "f8f8f8", "h": "2a1a12", "s": "f0c090", "e": "202838", "m": "c87860",
+		"b": "f8d040", "B": "d8a820", "a": "f0c838", "c": "f8f8f8", "g": "4a4a7a", "G": "34345a", "p": "3a3a58", "k": "c83030"},
 }
 
 
@@ -248,6 +272,15 @@ const CLASS_ICONS := {
 	"cnidario": {"vector": "agua_viva"},
 	"prehistorico": {"vector": "dino"},
 	"fantastico": {"vector": "estrela"},
+	"vegetal": {"vector": "broto"},
+	"aquatico": {"vector": "onda"},
+}
+
+## Ícones dos efeitos de estado (32 px).
+const STATUS_ICONS := {
+	"veneno": {"vector": "gota_veneno"}, "queimadura": {"vector": "chama"}, "lento": {"vector": "caracol"},
+	"congelado": {"vector": "floco"}, "atordoado": {"vector": "estrela_amarela"}, "preso": {"vector": "cipo"},
+	"empurrao": {"vector": "seta"}, "escudo": {"vector": "escudo"}, "regeneracao": {"vector": "cura"},
 }
 
 ## Ícones dos elementos dos golpes (32 px).
@@ -281,6 +314,22 @@ const ICONS := {
 	"chick": {"sap": "chick"},
 	"opcoes": {"vector": "engrenagem"},
 	"missoes": {"vector": "pergaminho"},
+	"mega_rede": {"vector": "mega_rede"},
+	"folha_medicinal": {"vector": "folha"},
+	"flor_ipe": {"vector": "flor"},
+	"mel_silvestre": {"sap": "honey", "dir": "food"},
+	"concha": {"vector": "concha"},
+	"pena_colorida": {"vector": "pena"},
+	"carteira": {"vector": "carteira"},
+	"kwanza": {"vector": "moeda"},
+	"conquistas": {"vector": "trofeu"},
+	"platina": {"vector": "platina"},
+	"bloqueado": {"vector": "cadeado"},
+	"mutante": {"vector": "dna"},
+	"cura": {"vector": "cura"},
+	"estrela": {"vector": "estrela_amarela"},
+	"fogo": {"vector": "chama"},
+	"trofeu": {"vector": "trofeu"},
 }
 
 
@@ -506,6 +555,50 @@ const VECTOR_ART := {
 		["l", 32, 14, 26, 8, 1.6, "c8f4ff"], ["l", 32, 14, 38, 8, 1.6, "c8f4ff"], ["l", 32, 50, 26, 56, 1.6, "c8f4ff"], ["l", 32, 50, 38, 56, 1.6, "c8f4ff"],
 		["c", 32, 32, 5, "e0faff"],
 	],
+	# classes novas e marca de mutante
+	"broto": [
+		["l", 32, 60, 32, 26, 3, "4a8a2a"],
+		["p", [32, 34, 12, 24, 6, 10, 22, 12, 32, 26], "5ab84a"], ["p", [32, 30, 52, 18, 58, 4, 42, 6, 32, 22], "6ccc58"],
+		["l", 32, 32, 16, 20, 1.2, "3a8a30"], ["l", 32, 28, 50, 12, 1.2, "3a8a30"],
+		["e", 32, 60, 14, 4, "8a6a40"],
+	],
+	"onda": [
+		["c", 22, 34, 14, "2f8ac8"], ["c", 42, 34, 14, "2f8ac8"], ["x", 0, 34, 64, 30],
+		["r", 6, 34, 52, 16, "2f8ac8"], ["c", 18, 30, 4, "a8d8ff"], ["c", 38, 30, 4, "a8d8ff"],
+		["l", 6, 52, 58, 52, 3, "1e6aa8"],
+	],
+	"dna": [
+		["l", 18, 6, 46, 30, 4, "b060e0"], ["l", 46, 30, 18, 54, 4, "b060e0"], ["l", 46, 6, 18, 30, 4, "62c24a"], ["l", 18, 30, 46, 54, 4, "62c24a"],
+		["l", 24, 12, 40, 12, 2, "f0e0ff"], ["l", 22, 22, 42, 22, 2, "f0e0ff"], ["l", 22, 38, 42, 38, 2, "f0e0ff"], ["l", 24, 48, 40, 48, 2, "f0e0ff"],
+	],
+	"cura": [["r", 24, 8, 16, 48, "62c24a"], ["r", 8, 24, 48, 16, "62c24a"], ["r", 27, 11, 5, 18, "a8f080"]],
+	"caracol": [
+		["e", 30, 48, 24, 7, "c8a070"], ["c", 30, 32, 16, "8a5a32"], ["c", 30, 32, 10, "b07a46"], ["c", 30, 32, 4, "8a5a32"],
+		["l", 52, 44, 58, 28, 2, "c8a070"], ["c", 58, 27, 2.5, "3a2a1a"],
+	],
+	"cipo": [["l", 8, 54, 30, 30, 4, "3f8a3a"], ["l", 30, 30, 56, 8, 4, "3f8a3a"], ["e", 20, 34, 7, 4, "5ab84a"], ["e", 44, 26, 7, 4, "5ab84a"], ["e", 34, 46, 6, 3.5, "5ab84a"]],
+	"seta": [["r", 6, 26, 32, 12, "c8a070"], ["p", [36, 12, 60, 32, 36, 52], "c8a070"]],
+	"escudo": [["p", [10, 8, 54, 8, 54, 30, 32, 58, 10, 30], "6aa0e8"], ["p", [18, 14, 46, 14, 46, 30, 32, 48, 18, 30], "a0c8f0"], ["r", 30, 14, 4, 34, "6aa0e8"]],
+	"estrela_amarela": [["p", [32, 4, 39, 23, 60, 24, 43, 37, 50, 58, 32, 46, 14, 58, 21, 37, 4, 24, 25, 23], "f0c020"]],
+	# itens e recursos
+	"flor": [["c", 32, 22, 9, "f8d838"], ["c", 18, 30, 9, "f8d838"], ["c", 46, 30, 9, "f8d838"], ["c", 24, 44, 9, "f8d838"], ["c", 40, 44, 9, "f8d838"], ["c", 32, 34, 7, "c87a1e"]],
+	"concha": [["p", [32, 8, 58, 40, 46, 56, 18, 56, 6, 40], "f4e0d0"], ["l", 32, 10, 32, 54, 1.6, "d8a8a0"], ["l", 32, 10, 18, 54, 1.6, "d8a8a0"], ["l", 32, 10, 46, 54, 1.6, "d8a8a0"], ["e", 32, 56, 10, 4, "e8c0b0"]],
+	"pena": [["l", 14, 58, 50, 8, 2, "8a6a4a"], ["p", [16, 52, 22, 26, 48, 6, 44, 32], "e04848"], ["p", [16, 52, 40, 36, 48, 6], "4a8ae8"]],
+	"carteira": [["r", 6, 14, 52, 36, "4a7ad0"], ["r", 10, 18, 18, 20, "f0e0c0"], ["c", 19, 26, 5, "c8925a"], ["r", 32, 20, 22, 3, "f0e0c0"], ["r", 32, 28, 18, 3, "f0e0c0"], ["r", 32, 36, 20, 3, "f0e0c0"]],
+	"mega_rede": [
+		["l", 34, 40, 50, 60, 4, "4a3a8a"],
+		["c", 26, 26, 21, "f0c020"],
+		["c", 26, 26, 17, "fff6d0"],
+		["m", 26, 26, 17, 17],
+		["l", 0, 18, 40, 58, 1.1, "c8a040"], ["l", 6, 4, 54, 52, 1.1, "c8a040"], ["l", 18, 0, 60, 42, 1.1, "c8a040"],
+		["l", 0, 34, 34, 0, 1.1, "c8a040"], ["l", 6, 50, 50, 6, 1.1, "c8a040"], ["l", 18, 60, 60, 18, 1.1, "c8a040"],
+		["m"],
+		["c", 44, 10, 6, "e04848"],
+	],
+	"moeda": [["c", 32, 32, 24, "e0a020"], ["c", 32, 32, 19, "f8d040"], ["r", 29, 18, 6, 28, "c88a18"], ["r", 22, 22, 20, 5, "c88a18"], ["r", 22, 36, 20, 5, "c88a18"]],
+	"trofeu": [["r", 22, 48, 20, 8, "a8782a"], ["r", 28, 38, 8, 12, "d8a830"], ["p", [12, 8, 52, 8, 46, 34, 32, 40, 18, 34], "f0c040"], ["c", 10, 18, 6, "f0c040"], ["c", 54, 18, 6, "f0c040"], ["c", 10, 18, 3, "00000000"], ["r", 22, 12, 8, 14, "fff0a0"]],
+	"platina": [["r", 22, 48, 20, 8, "7a8898"], ["r", 28, 38, 8, 12, "b8c8d8"], ["p", [12, 8, 52, 8, 46, 34, 32, 40, 18, 34], "d8e8f8"], ["r", 22, 12, 8, 14, "ffffff"], ["p", [32, 14, 36, 22, 44, 22, 38, 27, 40, 34, 32, 30, 24, 34, 26, 27, 20, 22, 28, 22], "8ad0f0"]],
+	"cadeado": [["r", 12, 28, 40, 30, "8a8a96"], ["r", 16, 32, 32, 22, "a8a8b4"], ["l", 20, 28, 20, 16, 4, "6a6a78"], ["l", 44, 28, 44, 16, 4, "6a6a78"], ["l", 20, 14, 44, 14, 4, "6a6a78"], ["c", 32, 42, 4, "3a3a48"]],
 	"pergaminho": [
 		["r", 12, 10, 40, 44, "f0dca8"],
 		["c", 12, 12, 5, "d8c088"], ["c", 52, 52, 5, "d8c088"],
@@ -662,6 +755,76 @@ static func panel_style(bg: Color, border: Color, pad := 6) -> StyleBoxTexture:
 	return s
 
 
+## Botão selecionado: contorno escuro + moldura dourada de 2 px por dentro (pixel art),
+## fundo claro com brilho em cima.
+static func selected_panel_style(bg: Color, gold: Color) -> StyleBoxTexture:
+	var tex: Texture2D = _cached("panel_sel_%s_%s" % [bg.to_html(), gold.to_html()], func():
+		var w := 16
+		var img := _img(w, 18)
+		var hi := bg.lightened(0.5)
+		for y in 16:
+			for x in w:
+				var cx := mini(x, w - 1 - x)
+				var cy := mini(y, 15 - y)
+				if cx + cy < 2:
+					continue
+				var c := bg
+				if cx == 0 or cy == 0 or cx + cy == 2:
+					c = Color("3b2a2a")
+				elif cx <= 2 or cy <= 2 or cx + cy <= 4:
+					c = gold if (cx == 1 or cy == 1 or cx + cy == 3) else gold.lightened(0.35)
+				elif y == 3 or y == 4:
+					c = hi
+				img.set_pixel(x, y, c)
+		var sh := Color(0, 0, 0, 0.35)
+		for y in range(16, 18):
+			for x in range(2, w - 2):
+				img.set_pixel(x, y, sh)
+		return _tex(img))
+	var s := StyleBoxTexture.new()
+	s.texture = tex
+	s.texture_margin_left = 5
+	s.texture_margin_right = 5
+	s.texture_margin_top = 5
+	s.texture_margin_bottom = 7
+	s.expand_margin_bottom = 2
+	for side in [SIDE_LEFT, SIDE_RIGHT, SIDE_TOP, SIDE_BOTTOM]:
+		s.set_content_margin(side, 6)
+	return s
+
+
+## Botão indisponível: cinza com listras diagonais (selecionado: borda vermelha).
+static func disabled_panel_style(selected := false) -> StyleBoxTexture:
+	var tex: Texture2D = _cached("panel_off_%s" % selected, func():
+		var w := 12
+		var img := _img(w, 14)
+		var bg := Color("d8d0c4")
+		var stripe := Color("c8c0b4")
+		var border := Color("c84040") if selected else Color("8a7e72")
+		for y in 12:
+			for x in w:
+				var cx := mini(x, w - 1 - x)
+				var cy := mini(y, 11 - y)
+				if cx + cy < 2:
+					continue
+				var c := stripe if (x + y) % 4 == 0 else bg
+				if cx == 0 or cy == 0 or cx + cy == 2:
+					c = border
+				img.set_pixel(x, y, c)
+		return _tex(img))
+	var s := StyleBoxTexture.new()
+	s.texture = tex
+	s.texture_margin_left = 4
+	s.texture_margin_right = 4
+	s.texture_margin_top = 4
+	s.texture_margin_bottom = 4
+	s.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
+	s.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
+	for side in [SIDE_LEFT, SIDE_RIGHT, SIDE_TOP, SIDE_BOTTOM]:
+		s.set_content_margin(side, 6)
+	return s
+
+
 ## Fundo de batalha em 240x160 (exibido em 2x).
 static func battle_bg(zone: String, platforms := true) -> Texture2D:
 	return _cached("bbg_%s_%s" % [zone, platforms], func(): return _tex(_make_battle_bg(zone, platforms)))
@@ -697,6 +860,7 @@ const BATTLE_PALETTES := {
 	"brejo": {"sky0": "6aa8c8", "sky1": "d8f0e8", "far": "8fc4ac", "mid": "3a7a5a", "ground0": "7cb874", "ground1": "5a9a60", "plat": "4f8a52", "tuft": "3a7044"},
 	"praia": {"sky0": "48a8f0", "sky1": "d0f0ff", "far": "5aa8e8", "mid": "2f78c8", "ground0": "f2e2a8", "ground1": "e2cc88", "plat": "d6be7c", "tuft": "b8a060"},
 	"manguezal": {"sky0": "6aa0c0", "sky1": "e0f0e0", "far": "7ab49a", "mid": "2f6a4a", "ground0": "8a7a58", "ground1": "6e6044", "plat": "5e5a3a", "tuft": "4a5a34"},
+	"serra": {"sky0": "7ab0d0", "sky1": "e8f4f0", "far": "6a9a8a", "mid": "2f5a3a", "ground0": "6aa85a", "ground1": "4f8a44", "plat": "4a7a3a", "tuft": "3a6a30"},
 }
 
 

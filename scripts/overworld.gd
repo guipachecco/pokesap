@@ -8,6 +8,7 @@ signal battle_requested(enemy: Creature, zone: String, opts: Dictionary)
 signal battle_done(result: String)
 
 const T := 16
+const STARTER_LEVEL := 4
 const ENCOUNTER_CHANCE := 0.11
 const DIRS := {"up": Vector2i.UP, "down": Vector2i.DOWN, "left": Vector2i.LEFT, "right": Vector2i.RIGHT}
 
@@ -42,6 +43,7 @@ var ground: Sprite2D        # chão da região inteira (uma textura só)
 var water_fx: Node2D        # brilhos animados na água
 var shadows: Sprite2D       # sombras dos objetos fixos
 var tall_layer: Sprite2D    # tufos da grama alta
+var decor: Node2D           # decoração no chão e nas paredes das salas (tapetes, quadros)
 var objects: Node2D         # árvores, casas, pedras, pessoas, animais: ordenados pela altura
 var fx_layer: Node2D        # borboletas e balão de interação
 var light_layer: Node2D     # brilho das fogueiras (somado à cena)
@@ -55,6 +57,11 @@ var _sway := 0
 var _butterflies := []
 var _blink := {}
 var _toasts := 0
+var _forage := {}           # Vector2i -> {"id", "item", "sprite"} (recursos para coletar)
+var _notices: Array = []    # avisos esperando a vez (não aparecem durante batalhas)
+var _notice_cd := 0.0
+var in_battle := false
+var hud: Panel              # nível do aventureiro e kwanzas (aparece com o menu)
 
 
 func _ready() -> void:
@@ -70,6 +77,8 @@ func _ready() -> void:
 	tall_layer = Sprite2D.new()
 	tall_layer.centered = false
 	add_child(tall_layer)
+	decor = Node2D.new()
+	add_child(decor)
 	objects = Node2D.new()
 	objects.y_sort_enabled = true
 	add_child(objects)
@@ -116,12 +125,32 @@ func _ready() -> void:
 	quest_screen = QuestScreen.new()
 	quest_screen.hide()
 	ui.add_child(quest_screen)
+	hud = PlayerHud.new()
+	hud.hide()
+	ui.add_child(hud)
 
 	story = StoryRunner.new(self)
 	_spawn_butterflies()
 	var reg := Game.region if Regions.has(Game.region) else "ilha"
 	load_region(reg, Game.player_pos if Game.player_pos.x >= 0 else Vector2i(-1, -1), Game.player_dir)
 	Settings.changed.connect(apply_graphics)
+	Game.notice.connect(_on_notice)
+
+
+# ---------------------------------------------------------------- avisos
+
+func _on_notice(title: String, text: String, icon: String) -> void:
+	_notices.append([title, text, icon])
+
+
+## Mostra os avisos na fila, um de cada vez (fora das batalhas).
+func _process_notices(delta: float) -> void:
+	_notice_cd = maxf(0.0, _notice_cd - delta)
+	if _notices.is_empty() or in_battle or _notice_cd > 0.0 or _toasts >= 3:
+		return
+	var n: Array = _notices.pop_front()
+	_notice_cd = 0.45
+	toast(n[0], n[1], n[2])
 
 
 # ---------------------------------------------------------------- regiões
@@ -141,24 +170,23 @@ func load_region(id: String, pos := Vector2i(-1, -1), dir := Vector2i.DOWN, entr
 			objects.remove_child(c)
 	for c in light_layer.get_children():
 		c.queue_free()
+	for c in decor.get_children():
+		c.queue_free()
 	_grass_fronts.clear()
 	_water_tiles.clear()
 	_static_objects.clear()
 	_campfires.clear()
 	_wild.clear()
+	_forage.clear()
 	npc_sprites.clear()
 	_blink.clear()
 
 	_build_world()
 	_build_npcs()
 	_build_campfires()
+	_build_forage()
 	_build_wild()
 	objects.add_child(player)
-
-	camera.limit_left = 0
-	camera.limit_top = 0
-	camera.limit_right = map.w * T
-	camera.limit_bottom = map.h * T
 
 	if entry != "" or pos.x < 0:
 		var e: Dictionary = rdata.entries.get(entry if entry != "" else rdata.entries.keys()[0], {})
@@ -174,6 +202,37 @@ func load_region(id: String, pos := Vector2i(-1, -1), dir := Vector2i.DOWN, entr
 	Game.player_pos = player_tile
 	Game.player_dir = facing
 	apply_graphics()
+	_mark_visited()
+
+
+## Primeira chegada a uma região do mundo: XP de exploração e evento (missões, conquistas).
+func _mark_visited() -> void:
+	if Regions.is_interior(region_id):
+		return
+	var first := not Game.visited.has(region_id)
+	Game.visited[region_id] = true
+	if first and region_id != "ilha":
+		Progression.add_xp(Progression.XP_NEW_REGION, "regiao")
+	Game.emit_event("enter_region", {"region": region_id, "first": first})
+
+
+## Limites da câmera. Salas menores que a tela ficam centralizadas (borda preta em volta).
+func _update_camera_limits() -> void:
+	var view := Vector2(get_viewport_rect().size) / camera.zoom
+	var mw := float(map.w * T)
+	var mh := float(map.h * T)
+	if mw < view.x:
+		camera.limit_left = int(floor((mw - view.x) / 2.0))
+		camera.limit_right = camera.limit_left + int(ceil(view.x))
+	else:
+		camera.limit_left = 0
+		camera.limit_right = int(mw)
+	if mh < view.y:
+		camera.limit_top = int(floor((mh - view.y) / 2.0))
+		camera.limit_bottom = camera.limit_top + int(ceil(view.y))
+	else:
+		camera.limit_top = 0
+		camera.limit_bottom = int(mh)
 
 
 ## Tile seguro para o jogador: caminhável, dentro do mapa e sem ninguém em cima.
@@ -183,6 +242,8 @@ func safe_tile(p: Vector2i) -> Vector2i:
 		blocked[map.npcs[n]] = true
 	for hs in rdata.get("houses", []):
 		blocked[hs.door] = true
+	for f in _forage:
+		blocked[f] = true
 	if map.in_bounds(p) and map.is_walkable(p) and not blocked.has(p):
 		return p
 	return map.nearest_walkable(p, blocked)
@@ -212,13 +273,20 @@ func _region_banner() -> void:
 	tw.tween_callback(p.queue_free)
 
 
-## Aviso no alto da tela (nova missão, missão concluída, progresso salvo).
-func toast(title: String, text: String) -> void:
+## Aviso no alto da tela (nova missão, missão concluída, subiu de nível, conquista...).
+func toast(title: String, text: String, icon := "") -> void:
 	var y := 40.0 + _toasts * 44.0
 	_toasts += 1
 	var p := UI.panel(Rect2(480, y, 240, 40), UI.CREAM, UI.ACCENT.darkened(0.3))
-	p.add_child(UI.label(title, Vector2(10, 4), UI.SMALL, UI.ACCENT.darkened(0.35)))
-	p.add_child(UI.label(text.to_upper(), Vector2(10, 17), UI.SMALL))
+	var x := 10.0
+	if icon != "" and Art.ICONS.has(icon):
+		p.add_child(UI.sprite_rect(Icons.geral(icon, 16), Vector2(8, 12)))
+		x = 30.0
+	p.add_child(UI.label(title, Vector2(x, 4), UI.SMALL, UI.ACCENT.darkened(0.35)))
+	var t := text.to_upper()
+	while UI.text_width(t, UI.SMALL) > 240 - x - 10 and t.length() > 4:
+		t = t.substr(0, t.length() - 4) + "..."
+	p.add_child(UI.label(t, Vector2(x, 17), UI.SMALL))
 	ui.add_child(p)
 	var tw := create_tween()
 	tw.tween_property(p, "position:x", 232.0, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -305,11 +373,25 @@ func _build_world() -> void:
 	for hs in rdata.get("houses", []):
 		var r: Rect2i = hs.rect
 		var hb := Vector2(r.position.x * T - 2, r.end.y * T)
-		_add_object(WorldArt.house(), hb, Vector2(0, -WorldArt.HOUSE_H), "house")
+		_add_object(WorldArt.house(hs.get("style", "casa")), hb, Vector2(0, -WorldArt.HOUSE_H), "house")
 	for pr in rdata.get("props", []):
 		if pr.kind == "barco":
 			var bpos := Vector2(pr.pos.x * T + 8, (pr.pos.y + 1) * T - 2)
 			_add_object(WorldArt.boat(), bpos, Vector2(-18, -10), "boat")
+			continue
+		# móveis das salas: os sólidos entram na ordem de altura; tapetes e quadros
+		# ficam por baixo de todo mundo
+		var size: Vector2i = pr.get("size", Vector2i.ONE)
+		var tex := InteriorArt.prop(pr.kind, size)
+		var s := Sprite2D.new()
+		s.centered = false
+		s.texture = tex
+		s.position = Vector2(pr.pos.x * T, (pr.pos.y + size.y) * T)
+		s.offset = Vector2(0, -tex.get_height())
+		if pr.get("walk", false):
+			decor.add_child(s)
+		else:
+			objects.add_child(s)
 
 
 func _add_object(tex: Texture2D, base: Vector2, offset: Vector2, kind: String) -> Sprite2D:
@@ -386,6 +468,48 @@ func _refresh_campfire(p: Vector2i) -> void:
 	cf.glow.visible = lit
 
 
+## Recursos para coletar (penas, flores, mel, conchas, folhas): somem ao pegar e
+## voltam a crescer depois de um tempo de jogo.
+func _build_forage() -> void:
+	for f in rdata.get("forage", []):
+		var s := Sprite2D.new()
+		s.centered = false
+		s.texture = InteriorArt.forage(f.item)
+		s.position = _tile_to_px(f.pos)
+		s.offset = Vector2(-10, -19)
+		objects.add_child(s)
+		_forage[f.pos] = {"id": f.id, "item": f.item, "sprite": s}
+	_refresh_forage()
+
+
+func _refresh_forage() -> void:
+	for p in _forage:
+		var f: Dictionary = _forage[p]
+		f.sprite.visible = Regions.forage_ready(region_id, f.id)
+
+
+func _forage_at(p: Vector2i) -> bool:
+	return _forage.has(p) and Regions.forage_ready(region_id, _forage[p].id)
+
+
+## Coleta sem batalha: o recurso vai para a mochila e conta para missões e conquistas.
+func _collect_forage(p: Vector2i) -> void:
+	var f: Dictionary = _forage[p]
+	if not Regions.forage_ready(region_id, f.id):
+		return
+	busy = true
+	_in_story += 1
+	Game.forage[Regions.forage_key(region_id, f.id)] = Game.play_time
+	f.sprite.visible = false
+	Game.add_item(f.item, 1)
+	Game.emit_event("forage", {"item": f.item, "n": 1, "region": region_id})
+	await msg.say("Você coletou 1 %s!" % DB.ITEMS[f.item].name)
+	await story.update_goals()
+	msg.hide()
+	_in_story -= 1
+	busy = _in_story > 0
+
+
 func _build_wild() -> void:
 	for wd in rdata.get("wild", []):
 		if not story.check(wd.get("if", {})):
@@ -394,7 +518,7 @@ func _build_wild() -> void:
 		var tile := Vector2i(-1, -1)
 		for _try in 20:
 			var p := area.position + Vector2i(randi_range(0, area.size.x - 1), randi_range(0, area.size.y - 1))
-			if map.is_walkable(p) and map.zone_at(p) == "" and _npc_at(p) == "" and _wild_at(p) < 0:
+			if map.is_walkable(p) and map.zone_at(p) == "" and _npc_at(p) == "" and _wild_at(p) < 0 and not _forage.has(p):
 				tile = p
 				break
 		if tile.x < 0:
@@ -418,6 +542,7 @@ func _build_wild() -> void:
 func apply_graphics() -> void:
 	# zoom inteiro: pixels continuam nítidos; menor zoom mostra mais área do mapa
 	camera.zoom = Vector2.ONE * Settings.camera_zoom
+	_update_camera_limits()
 	ground.texture = WorldArt.ground(map, Settings.detail)
 	shadows.texture = WorldArt.shadow_layer(map, _static_objects)
 	shadows.visible = Settings.shadows
@@ -530,6 +655,9 @@ func _draw_fx() -> void:
 func _animate(delta: float) -> void:
 	_anim_time += delta
 	fx_layer.queue_redraw()
+	_process_notices(delta)
+	if int(_anim_time) != int(_anim_time - delta):
+		_refresh_forage()  # recursos que voltaram a crescer
 	_update_wild(delta)
 	_update_hint()
 	if not Settings.animations:
@@ -581,7 +709,7 @@ func _update_wild(delta: float) -> void:
 		var to: Vector2i = w.tile + d
 		var area: Rect2i = w.area
 		if not area.has_point(to) or not map.is_walkable(to) or map.zone_at(to) != "" or to == player_tile \
-				or _npc_at(to) != "" or _wild_at(to) >= 0 or map.get_tile(to) == "D":
+				or _npc_at(to) != "" or _wild_at(to) >= 0 or map.get_tile(to) == "D" or _forage.has(to):
 			continue
 		w.tile = to
 		w.moving = true
@@ -719,7 +847,7 @@ func _box_free(p: Vector2, from: Vector2) -> bool:
 
 
 func _tile_passable(t: Vector2i) -> bool:
-	return map.in_bounds(t) and map.is_walkable(t) and _npc_at(t) == "" and _wild_at(t) < 0 and _blocked_by_grass(t) == ""
+	return map.in_bounds(t) and map.is_walkable(t) and _npc_at(t) == "" and _wild_at(t) < 0 and _blocked_by_grass(t) == "" 		and not _forage_at(t)
 
 
 ## Encostou num tile sólido: porta (entra na casa) ou grama fechada (avisa).
@@ -810,7 +938,10 @@ func _event_here() -> bool:
 	for ev in rdata.get("events", []):
 		var r: Rect2i = ev.area
 		if r.has_point(player_tile) and story.check(ev.get("if", {})):
-			_run_story(Story.SCRIPTS[ev.do])
+			if ev.has("do_warp"):
+				_run_story([["warp", ev.do_warp[0], ev.do_warp[1]]])
+			else:
+				_run_story(Story.SCRIPTS[ev.do])
 			return true
 	return false
 
@@ -818,10 +949,10 @@ func _event_here() -> bool:
 func _check_events() -> void:
 	for ev in rdata.get("events", []):
 		var r: Rect2i = ev.area
-		if r.has_point(player_tile) and story.check(ev.get("if", {})):
+		if r.has_point(player_tile) and story.check(ev.get("if", {})) and not ev.has("do_warp"):
 			await _run_story(Story.SCRIPTS[ev.do])
 			return
-	busy = false
+	busy = _in_story > 0
 
 
 func _start_encounter(zone: String) -> void:
@@ -835,7 +966,7 @@ func _start_encounter(zone: String) -> void:
 		if roll < 0:
 			var enemy := Creature.create(e[0], randi_range(e[2], e[3]))
 			busy = true
-			battle_requested.emit(enemy, zone, {})
+			_request_battle(enemy, zone, {})
 			return
 
 
@@ -860,6 +991,13 @@ func _interactable() -> Dictionary:
 	var npc := _npc_at(t)
 	if npc != "":
 		return {"kind": "npc", "tile": t, "id": npc}
+	# do outro lado do balcão (enfermeira, lojista, mestre da Guilda)
+	if map.get_tile(t) == "c":
+		var across := _npc_at(t + facing)
+		if across != "":
+			return {"kind": "npc", "tile": t + facing, "id": across}
+	if _forage_at(t):
+		return {"kind": "forage", "tile": t}
 	var wi := _wild_at(t)
 	if wi >= 0:
 		return {"kind": "wild", "tile": t, "index": wi}
@@ -875,7 +1013,7 @@ func _update_hint() -> void:
 	if it.is_empty():
 		hint.hide()
 		return
-	var text: String = {"npc": "Z: FALAR", "wild": "Z: ENFRENTAR", "campfire": "Z: DESCANSAR", "sign": "Z: LER"}[it.kind]
+	var text: String = {"npc": "Z: FALAR", "wild": "Z: ENFRENTAR", "campfire": "Z: DESCANSAR", "sign": "Z: LER", "forage": "Z: COLETAR"}[it.kind]
 	if it.kind == "npc" and rdata.npcs[it.id].has("creature"):
 		text = "Z: ENFRENTAR"
 	if hint_label.text != text:
@@ -903,6 +1041,8 @@ func _interact() -> void:
 			await _run_story(script)
 		"campfire":
 			await _use_campfire(it.tile)
+		"forage":
+			await _collect_forage(it.tile)
 		"wild":
 			_fight_wild(it.index)
 
@@ -944,13 +1084,22 @@ func _use_campfire(p: Vector2i) -> void:
 	_in_story += 1
 	var cf: Dictionary = _campfires[p]
 	var key := _campfire_key(cf.id)
-	if not Game.campfires.has(key):
+	var first := not Game.campfires.has(key)
+	if first:
 		Game.campfires[key] = true
 		_refresh_campfire(p)
 		await msg.say("Você acendeu a fogueira! O fogo estala e aquece o lugar.")
+		Progression.add_xp(Progression.XP_CAMPFIRE, "fogueira")
+	Game.emit_event("campfire", {"key": key, "first": first})
 	Game.last_campfire = {"region": region_id, "id": cf.id}
 	Game.heal_party()
-	await msg.say("A equipe descansou perto do fogo e recuperou as forças.")
+	if Game.party.is_empty():
+		await msg.say("Você descansou um pouco perto do fogo.")
+	else:
+		await msg.say("A equipe descansou perto do fogo e os animais de pé recuperaram as forças.")
+		var down := Game.fainted().size()
+		if down > 0:
+			await msg.say("%d animal(is) desmaiado(s) precisa(m) do hospital: o descanso não reanima." % down)
 	if await ask("Salvar o progresso da aventura?"):
 		Game.player_pos = player_tile
 		Game.player_dir = facing
@@ -1008,7 +1157,8 @@ func remove_npc(id: String) -> void:
 
 func give_starter() -> void:
 	var choice := await _choose_starter()
-	var c := Creature.create(choice, 5)
+	# começa no nível 4: no nível 5 aprende o primeiro golpe novo
+	var c := Creature.create(choice, STARTER_LEVEL)
 	Game.add_creature(c)
 	await msg.say("Você escolheu o %s! Cuide bem dele." % c.display_name())
 
@@ -1017,9 +1167,33 @@ func give_starter() -> void:
 func story_battle(species: String, level: int, opts: Dictionary) -> String:
 	var enemy := Creature.create(species, level)
 	msg.hide()
-	battle_requested.emit(enemy, rdata.get("zone", "campo"), opts)
+	_request_battle(enemy, rdata.get("zone", "campo"), opts)
 	var result: String = await battle_done
 	return result
+
+
+## Batalha contra um aventureiro (equipe inteira, sem fuga nem captura). As recompensas
+## saem só na primeira vitória (Trainers.on_win).
+func trainer_battle(id: String) -> String:
+	var td: Dictionary = Trainers.DATA[id]
+	await msg.say(td.intro)
+	var team := Trainers.team(id)
+	msg.hide()
+	_request_battle(team[0], rdata.get("zone", "campo"), {"trainer": id, "team": team, "trainer_name": td.name})
+	var result: String = await battle_done
+	if result == "win":
+		var reward := Trainers.on_win(id)
+		await msg.say(td.win)
+		if reward != "":
+			await msg.say("Você venceu %s! Recompensa: %s." % [td.name, reward])
+	else:
+		await msg.say(td.lose)
+	return result
+
+
+func _request_battle(enemy: Creature, zone: String, opts: Dictionary) -> void:
+	in_battle = true
+	battle_requested.emit(enemy, zone, opts)
 
 
 ## Animal andando no mapa: enfrentar quando o jogador chega perto e aperta Z.
@@ -1029,11 +1203,12 @@ func _fight_wild(index: int) -> void:
 	var enemy := Creature.create(w.species, randi_range(lv[0], lv[1]))
 	busy = true
 	w.sprite.texture = CreatureSprites.small_frames(w.species, "front")[0]
-	battle_requested.emit(enemy, rdata.get("zone", "campo"), {"wild_index": w.id})
+	_request_battle(enemy, rdata.get("zone", "campo"), {"wild_index": w.id})
 
 
 ## A cena principal avisa o fim de cada batalha.
 func on_battle_finished(result: String, opts: Dictionary) -> void:
+	in_battle = false
 	if opts.has("wild_index"):
 		# o animal do mapa sai de cena depois do encontro
 		for i in _wild.size():
@@ -1052,10 +1227,80 @@ func on_battle_finished(result: String, opts: Dictionary) -> void:
 		busy = false
 
 
+# ---------------------------------------------------------------- serviços (loja, hospital, laboratório)
+
+## Pergunta com várias opções (menu ao lado da caixa de texto). Retorna o índice ou -1.
+func choose(question: String, options: Array) -> int:
+	await msg.say(question, false)
+	var h := 16.0 + options.size() * 26.0
+	var m := ChoiceMenu.new(Rect2(330, 240 - h, 146, h), options)
+	ui.add_child(m)
+	var r := await m.choose()
+	m.queue_free()
+	return r
+
+
+func open_shop() -> void:
+	msg.hide()
+	var shop := ShopScreen.new()
+	ui.add_child(shop)
+	await shop.run()
+	shop.queue_free()
+
+
+## Balcão da enfermeira: pedido de recursos para reanimar os desmaiados.
+func hospital_desk() -> void:
+	var down := Game.fainted()
+	if Hospital.has_request():
+		if Hospital.can_deliver() and not down.is_empty():
+			var yes := await ask("ENFERMEIRA CLARA: Você trouxe tudo! Entregar %s para o remédio?" % Hospital.need_text(Game.revival.need))
+			if yes:
+				var n := Hospital.deliver()
+				if n > 0:
+					await msg.say("A enfermeira preparou o remédio... Pronto! %d animal(is) voltou(aram) com os PS cheios!" % n)
+				else:
+					await msg.say("ENFERMEIRA CLARA: Algo não conferiu. Nada foi gasto, pode tentar de novo.")
+			else:
+				await msg.say("ENFERMEIRA CLARA: Tudo bem, o pedido continua guardado.")
+		elif down.is_empty():
+			await msg.say("ENFERMEIRA CLARA: Ninguém desmaiado agora! Guardo o pedido para quando precisar.")
+		else:
+			await msg.say("ENFERMEIRA CLARA: Ainda faltam: %s." % Hospital.need_text(Hospital.missing()))
+			await msg.say("Os recursos brilham pelo mapa: penas no campo, flores e mel perto das árvores, conchas na areia e folhas perto da água.")
+		return
+	if down.is_empty():
+		await msg.say("ENFERMEIRA CLARA: Bem-vindo ao hospital! Seus animais estão bem.")
+		await msg.say("Descanso cura quem está de pé. Quem desmaiar, traga aqui: eu preparo um remédio com recursos da natureza.")
+		return
+	await msg.say("ENFERMEIRA CLARA: Oh, %d animal(is) desmaiado(s)! O descanso não resolve: preciso preparar um remédio." % down.size())
+	var need := Hospital.new_request()
+	await msg.say("Para o remédio preciso de: %s. Tudo se coleta no mapa, sem batalhar." % Hospital.need_text(need))
+	await msg.say("O pedido fica anotado nas suas MISSÕES. Volte quando tiver tudo!")
+
+
+## Laboratório da Dra. Flora (mutação, liberada no nível 20 do aventureiro).
+func mutation_lab() -> void:
+	if not Progression.mutation_unlocked():
+		await msg.say("DRA. FLORA: Este é o laboratório de mutação. Aqui dois animais viram um só, mais forte.")
+		await msg.say("Mas é um trabalho delicado: só atendo aventureiros de nível 20. Você está no nível %d." % Game.player_level)
+		return
+	await msg.say("DRA. FLORA: Pronto para uma mutação? Escolha dois animais da equipe. Eu mostro tudo antes de cobrar.")
+	msg.hide()
+	var lab := MutationScreen.new()
+	ui.add_child(lab)
+	var made: Creature = await lab.run()
+	lab.queue_free()
+	if made:
+		await msg.say("DRA. FLORA: Incrível! Nasceu o %s!" % made.display_name())
+
+
 # ---------------------------------------------------------------- casa
 
 func _enter_house(hs: Dictionary) -> void:
 	busy = true
+	if hs.has("warp"):
+		await _run_story([["warp", hs.warp[0], hs.warp[1]]])
+		return
 	await _fade(true)
 	await _fade(false)
 	await _run_story(Story.SCRIPTS[hs.get("enter", "casa")])
@@ -1146,42 +1391,55 @@ func _choose_starter() -> String:
 
 # ---------------------------------------------------------------- menu
 
+## Menu de pausa. Não tem SALVAR: o progresso só é salvo nas fogueiras (para manter o
+## risco da exploração); o painel ao lado mostra o nível do aventureiro e os kwanzas.
+const MENU_ITEMS := ["EQUIPE", "MOCHILA", "REGISTRO", "MISSÕES", "CONQUISTAS", "OPÇÕES", "FECHAR"]
+
+
 func _open_menu() -> void:
 	busy = true
 	var has_party := not Game.party.is_empty()
-	start_menu.icons = [Art.animal(Game.party[0].species, 32) if has_party else Art.icon("equipe"), Art.icon("fruta"), Art.icon("registro"),
-		Art.icon("missoes"), Art.icon("mel"), Art.icon("opcoes"), null]
-	start_menu.set_items(["EQUIPE", "MOCHILA", "REGISTRO", "MISSÕES", "SALVAR", "OPÇÕES", "FECHAR"], [has_party, true, true, true, true, true, true])
+	start_menu.icons = [Icons.portrait(Game.party[0], 32) if has_party else Art.icon("equipe"), Art.icon("fruta"), Art.icon("registro"),
+		Art.icon("missoes"), Art.icon("conquistas"), Art.icon("opcoes"), null]
+	start_menu.set_items(MENU_ITEMS, [has_party, true, true, true, true, true, true])
+	hud.refresh()
+	hud.show()
 	while true:
 		var i := await start_menu.choose()
-		if i == 0:
-			party_screen.index = 0
-			await party_screen.run_view()
-		elif i == 1:
-			await _bag_flow()
-		elif i == 2:
-			await dex_screen.run()
-		elif i == 3:
-			start_menu.hide()
-			await quest_screen.run()
-		elif i == 4:
-			start_menu.hide()
-			Game.player_pos = player_tile
-			Game.player_dir = facing
-			if Game.save_game():
-				await msg.say("O jogo foi salvo com sucesso!")
-			else:
-				await msg.say("Não foi possível salvar: %s." % Game.last_error)
-			msg.hide()
-		elif i == 5:
-			start_menu.hide()
-			var screen := SettingsScreen.new()
-			ui.add_child(screen)
-			await screen.run()
-			screen.queue_free()
-		else:
-			break
+		match MENU_ITEMS[i] if i >= 0 else "FECHAR":
+			"EQUIPE":
+				party_screen.index = 0
+				await party_screen.run_view()
+			"MOCHILA":
+				await _bag_flow()
+			"REGISTRO":
+				await dex_screen.run()
+			"MISSÕES":
+				start_menu.hide()
+				hud.hide()
+				await quest_screen.run()
+				hud.show()
+			"CONQUISTAS":
+				start_menu.hide()
+				hud.hide()
+				var ach := AchievementsScreen.new()
+				ui.add_child(ach)
+				await ach.run()
+				ach.queue_free()
+				hud.show()
+			"OPÇÕES":
+				start_menu.hide()
+				hud.hide()
+				var screen := SettingsScreen.new()
+				ui.add_child(screen)
+				await screen.run()
+				screen.queue_free()
+				hud.show()
+			_:
+				break
+		hud.refresh()
 	start_menu.hide()
+	hud.hide()
 	busy = false
 
 
@@ -1199,7 +1457,9 @@ func _bag_flow() -> void:
 			var t := await party_screen.pick("Usar %s em qual animal?" % item.name)
 			if t >= 0:
 				var c: Creature = Game.party[t]
-				if c.is_fainted() or c.hp >= c.stats.hp:
+				if c.is_fainted():
+					await _screen_msg("%s está desmaiado: só o hospital reanima." % c.display_name())
+				elif c.hp >= c.stats.hp:
 					await _screen_msg("Não vai ter efeito.")
 				else:
 					var healed := mini(item.heal, c.stats.hp - c.hp)
@@ -1209,7 +1469,13 @@ func _bag_flow() -> void:
 					await _screen_msg("%s recuperou %d PS!" % [c.display_name(), healed])
 			party_screen.hide()
 		else:
-			await _screen_msg("Só dá para usar a Rede durante uma batalha.")
+			match item.get("kind", ""):
+				"captura":
+					await _screen_msg("Só dá para usar a %s durante uma batalha." % item.name)
+				"recurso":
+					await _screen_msg("%s: recurso para o hospital e para missões." % item.name)
+				_:
+					await _screen_msg(item.desc)
 	bag_screen.hide()
 
 
@@ -1222,6 +1488,13 @@ func _screen_msg(text: String) -> void:
 ## Depois de perder todas as batalhas: volta para a última fogueira usada (ou para casa).
 func respawn_after_defeat() -> void:
 	Game.heal_party()
+	# todos desmaiados: o primeiro animal volta com metade dos PS (os outros, só no hospital)
+	var lead_revived := false
+	if not Game.has_able() and not Game.party.is_empty():
+		var lead: Creature = Game.party[0]
+		lead.heal_full()
+		lead.hp = maxi(1, lead.stats.hp / 2)
+		lead_revived = true
 	var lc: Dictionary = Game.last_campfire
 	var where := "casa"
 	if lc.has("region") and Regions.has(lc.region) and Regions.data(lc.region).get("campfires", {}).has(lc.id):
@@ -1246,9 +1519,11 @@ func respawn_after_defeat() -> void:
 	Game.player_dir = facing
 	busy = true
 	if where == "fogueira":
-		await msg.say("Você voltou para a última fogueira e seus animais descansaram perto do fogo.")
+		await msg.say("Você voltou para a última fogueira e descansou perto do fogo.")
 	else:
-		await msg.say("Você correu de volta para casa e seus animais descansaram.")
+		await msg.say("Você correu de volta para casa para descansar.")
+	if lead_revived:
+		await msg.say("%s se recuperou um pouco. Os outros desmaiados precisam do hospital." % Game.party[0].display_name())
 	msg.hide()
 
 

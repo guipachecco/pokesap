@@ -5,8 +5,9 @@ extends RefCounted
 ##   ~ mar   s areia   m lama   . , grama   f flores   p caminho   b tábuas (passarela)
 ##   T árvore   r pedra   L tronco caído   F fogueira   S placa   H casa   D porta
 ##   G grama alta (campo)   M grama alta (brejo)   B grama alta (praia)   w lagoa
+##   salas: _ piso   # parede   c móvel (sólido)   e tapete da saída
 
-const WALKABLE := ".,fpsGMBbm"
+const WALKABLE := ".,fpsGMBbm_e"
 
 var id := ""
 var w := 0
