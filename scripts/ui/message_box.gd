@@ -91,10 +91,27 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not is_visible_in_tree():
 		return
 	if event.is_action_pressed("ok") or event.is_action_pressed("cancel"):
-		if typing:
-			typing = false
+		if _advance_or_reveal():
 			get_viewport().set_input_as_handled()
-		elif waiting:
-			waiting = false
-			get_viewport().set_input_as_handled()
-			_advance.emit.call_deferred()
+
+
+## Clique com o botão esquerdo em qualquer parte da caixa: mostra o texto inteiro
+## (se ainda estiver aparecendo) ou passa para a próxima fala. O clique é consumido
+## aqui, então um clique só avança uma fala e não chega aos outros elementos.
+func _gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not event.is_echo():
+		_advance_or_reveal()
+		accept_event()
+
+
+## Retorna true se a ação foi usada (revelar o texto ou avançar a fala).
+func _advance_or_reveal() -> bool:
+	if typing:
+		typing = false
+		label.visible_characters = -1  # mostra a fala inteira já neste quadro
+		return true
+	if waiting:
+		waiting = false
+		_advance.emit.call_deferred()
+		return true
+	return false

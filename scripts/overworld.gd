@@ -8,10 +8,7 @@ signal battle_requested(enemy: Creature, zone: String, opts: Dictionary)
 signal battle_done(result: String)
 
 const T := 16
-const WALK_TIME := 0.22
-const RUN_TIME := 0.12
 const ENCOUNTER_CHANCE := 0.11
-const SQRT2 := 1.4142135
 const DIRS := {"up": Vector2i.UP, "down": Vector2i.DOWN, "left": Vector2i.LEFT, "right": Vector2i.RIGHT}
 
 var region_id := ""
@@ -26,11 +23,6 @@ var busy := false  # diálogo/menu aberto ou batalha
 var encounters_enabled := true  # desligado nos testes automáticos
 var _in_story := 0
 var _from_tile := Vector2i.ZERO
-var _move_from := Vector2.ZERO
-var _move_to := Vector2.ZERO
-var _move_t := 0.0
-var _move_dur := WALK_TIME
-var _step_parity := false
 var _anim_time := 0.0
 var _water_frame := 0
 
@@ -605,35 +597,41 @@ func _wild_at(p: Vector2i) -> int:
 
 
 # ---------------------------------------------------------------- movimento
+# Movimento contínuo: a cada quadro lê o estado das teclas (não eventos repetidos),
+# move pela velocidade x delta e para no mesmo quadro em que a tecla é solta.
+# A colisão usa uma caixinha nos pés contra os tiles sólidos, com deslizamento
+# separado em x e y. Antes o jogo andava de tile em tile: cada toque prendia o
+# jogador num passo inteiro de 0,22 s, a tecla só era lida no fim do passo e soltar
+# a tecla não parava até chegar ao próximo tile, o que dava a sensação de atraso.
+
+const WALK_SPEED := 72.0   # px/s (a mesma velocidade de antes: 16 px a cada 0,22 s)
+const RUN_SPEED := 133.0
+const FOOT_W := 10.0       # caixa de colisão dos pés
+const FOOT_H := 6.0
+
+var _walk_dist := 0.0
+var _bump_cd := 0.0        # evita repetir o aviso de área fechada a cada quadro
+
 
 func _process(delta: float) -> void:
 	_animate(delta)
-
-	if moving:
-		_move_t += delta / _move_dur
-		if _move_t < 1.0:
-			player.position = _move_from.lerp(_move_to, _move_t)
-			var frame := 0
-			if _move_t > 0.1 and _move_t < 0.85:
-				frame = 1 if _step_parity else 2
-			_update_player_sprite(frame)
-			return
-		# Passo concluído. O tempo que sobrou já conta para o próximo passo,
-		# então segurar as teclas dá um movimento contínuo, sem trancos.
-		var leftover := (_move_t - 1.0) * _move_dur
-		moving = false
-		player.position = _move_to
-		_update_player_sprite(0)
-		_on_step_finished()
-		if busy or not _try_move(_input_dir()) or not moving:
-			return
-		_move_t = minf(leftover / _move_dur, 0.99)
-		player.position = _move_from.lerp(_move_to, _move_t)
-		return
-
 	if busy:
+		if moving:
+			moving = false
+			_update_player_sprite(0)
 		return
-	_try_move(_input_dir())
+	_move_player(delta, _input_dir(), Input.is_action_pressed("run"))
+
+
+## Ao perder o foco da janela (alt+tab), solta as teclas: senão uma tecla solta fora
+## da janela ficaria "presa" e o personagem continuaria andando.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		for a in ["up", "down", "left", "right", "run"]:
+			Input.action_release(a)
+		if moving:
+			moving = false
+			_update_player_sprite(0)
 
 
 ## Direção pedida pelo teclado (WASD ou setas), já com as diagonais.
@@ -644,45 +642,96 @@ func _input_dir() -> Vector2i:
 		int(Input.is_action_pressed("down")) - int(Input.is_action_pressed("up")))
 
 
-## Tenta andar um tile na direção d (pode ser diagonal). Retorna false se não havia direção.
-func _try_move(d: Vector2i) -> bool:
+## Move o jogador por um quadro. d: direção das teclas; run: correndo.
+func _move_player(delta: float, d: Vector2i, run: bool) -> void:
+	_bump_cd = maxf(0.0, _bump_cd - delta)
 	if d == Vector2i.ZERO:
-		return false
-	if d.x == 0 or d.y == 0:
-		_step_cardinal(d)
-		return true
+		if moving:
+			moving = false
+			_update_player_sprite(0)
+		return
 	# na diagonal o personagem olha para o lado (como nos clássicos)
-	facing = Vector2i(d.x, 0)
-	_update_player_sprite()
-	var h := Vector2i(d.x, 0)
-	var v := Vector2i(0, d.y)
-	# só corta o canto se os dois lados estiverem livres (não atravessa quinas)
-	if _can_enter(player_tile + d) and _can_pass(player_tile + h) and _can_pass(player_tile + v):
-		_start_step(d)
-		return true
-	# diagonal bloqueada: desliza pelo eixo que estiver livre
-	for a: Vector2i in [h, v]:
-		if _can_enter(player_tile + a) or _door_at(player_tile + a) != {}:
-			_step_cardinal(a)
-			return true
-	for a: Vector2i in [d, h, v]:
-		if _blocked_by_grass(player_tile + a) != "":
-			_block_zone(_blocked_by_grass(player_tile + a))
-			break
+	facing = Vector2i(d.x, 0) if d.x != 0 else d
+	var v := Vector2(d).normalized() * (RUN_SPEED if run else WALK_SPEED) * delta
+	var start := player.position
+	var pos := start
+	if v.x != 0.0:
+		var nx := pos + Vector2(v.x, 0)
+		if _box_free(nx, pos):
+			pos = nx
+		else:
+			_bumped(Vector2i(signi(d.x), 0), pos)
+	if v.y != 0.0:
+		var ny := pos + Vector2(0, v.y)
+		if _box_free(ny, pos):
+			pos = ny
+		else:
+			_bumped(Vector2i(0, signi(d.y)), pos)
+	if busy:
+		return
+	player.position = pos
+	var moved := pos.distance_to(start)
+	moving = moved > 0.001
+	if moving:
+		_walk_dist += moved
+		# passos alternados: pé esquerdo, parado, pé direito, parado (a cada 8 px)
+		var ph := fmod(_walk_dist, 32.0) / 32.0
+		_update_player_sprite(1 if ph < 0.25 else (0 if ph < 0.5 else (2 if ph < 0.75 else 0)))
+	else:
+		_update_player_sprite(0)
+	var t := _px_to_tile(pos)
+	if t != player_tile:
+		_from_tile = player_tile
+		player_tile = t
+		_on_step_finished()
+
+
+## Tile onde estão os pés.
+func _px_to_tile(p: Vector2) -> Vector2i:
+	return Vector2i(floori(p.x / T), floori((p.y - 3.0) / T))
+
+
+func _foot_rect(p: Vector2) -> Rect2:
+	return Rect2(p.x - FOOT_W / 2.0, p.y - FOOT_H - 0.5, FOOT_W, FOOT_H)
+
+
+## Tiles que a caixa dos pés toca.
+func _tiles_under(r: Rect2) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for ty in range(floori(r.position.y / T), floori((r.end.y - 0.01) / T) + 1):
+		for tx in range(floori(r.position.x / T), floori((r.end.x - 0.01) / T) + 1):
+			out.append(Vector2i(tx, ty))
+	return out
+
+
+## A caixa dos pés cabe em p? Tiles que ela já tocava antes continuam liberados
+## (assim nunca fica preso se um animal parar encostado).
+func _box_free(p: Vector2, from: Vector2) -> bool:
+	var before := _tiles_under(_foot_rect(from))
+	for t in _tiles_under(_foot_rect(p)):
+		if t in before:
+			continue
+		if not _tile_passable(t):
+			return false
 	return true
 
 
-func _step_cardinal(d: Vector2i) -> void:
-	facing = d
-	_update_player_sprite()
-	var target := player_tile + d
-	var door := _door_at(target)
-	if not door.is_empty():
+func _tile_passable(t: Vector2i) -> bool:
+	return map.in_bounds(t) and map.is_walkable(t) and _npc_at(t) == "" and _wild_at(t) < 0 and _blocked_by_grass(t) == ""
+
+
+## Encostou num tile sólido: porta (entra na casa) ou grama fechada (avisa).
+func _bumped(dir: Vector2i, pos: Vector2) -> void:
+	var t := _px_to_tile(pos) + dir
+	var door := _door_at(t)
+	if not door.is_empty() and dir == Vector2i.UP:
+		facing = Vector2i.UP
 		_enter_house(door)
-	elif _blocked_by_grass(target) != "":
-		_block_zone(_blocked_by_grass(target))
-	elif _can_enter(target):
-		_start_step(d)
+		return
+	var reason := _blocked_by_grass(t)
+	if reason != "" and _bump_cd <= 0.0:
+		_bump_cd = 1.2
+		_block_zone(reason)
 
 
 func _door_at(p: Vector2i) -> Dictionary:
@@ -713,35 +762,27 @@ func _block_zone(reason: String) -> void:
 	if reason == "sem_animal":
 		await _run_story([["say", "PROFESSORA IPÊ: Espere! A grama alta está cheia de animais selvagens!"],
 			["say", "Venha falar comigo primeiro, aqui perto da sua casa."]])
-		return
-	var lines: Array = rdata.locks[reason].say
-	var script := []
-	for l in lines:
-		script.append(["say", l])
-	await _run_story(script)
+	else:
+		var script := []
+		for l in rdata.locks[reason].say:
+			script.append(["say", l])
+		await _run_story(script)
+	_bump_cd = 1.2
 
 
-## Tile onde o jogador pode parar.
+## Tile onde o jogador pode parar (usado ao posicionar e recuar).
 func _can_enter(p: Vector2i) -> bool:
-	return map.is_walkable(p) and _npc_at(p) == "" and _wild_at(p) < 0 and _blocked_by_grass(p) == ""
+	return _tile_passable(p)
 
 
-## Tile ao lado que precisa estar livre para cortar a quina numa diagonal.
-func _can_pass(p: Vector2i) -> bool:
-	return map.is_walkable(p) and _npc_at(p) == "" and _wild_at(p) < 0
-
-
-func _start_step(d: Vector2i) -> void:
-	moving = true
-	_step_parity = not _step_parity
-	_from_tile = player_tile
-	_move_from = _tile_to_px(player_tile)
-	_move_to = _tile_to_px(player_tile + d)
-	_move_t = 0.0
-	# a diagonal percorre √2 vezes a distância, então dura √2 vezes mais (mesma velocidade)
-	var diagonal := d.x != 0 and d.y != 0
-	_move_dur = (RUN_TIME if Input.is_action_pressed("run") else WALK_TIME) * (SQRT2 if diagonal else 1.0)
-	player_tile += d
+## Coloca o jogador num tile (viagens, testes).
+func place_player(p: Vector2i, dir := Vector2i.DOWN) -> void:
+	player_tile = p
+	_from_tile = p
+	facing = dir
+	moving = false
+	player.position = _tile_to_px(p)
+	_update_player_sprite(0)
 
 
 func _npc_at(p: Vector2i) -> String:
@@ -751,6 +792,7 @@ func _npc_at(p: Vector2i) -> String:
 	return ""
 
 
+## Entrou num tile novo: guarda a posição, confere eventos e encontros.
 func _on_step_finished() -> void:
 	Game.player_pos = player_tile
 	Game.player_dir = facing
