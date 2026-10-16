@@ -25,6 +25,7 @@ static var _shader: Shader
 var species := ""
 var facing_right := false
 var body: Sprite2D
+var overlay: Sprite2D  # partes que passam na frente do alvo (voltas da constrição)
 var status_fx: StatusFX
 var _set: Dictionary
 var _anim := ""
@@ -50,6 +51,14 @@ func _init() -> void:
 	_mat.shader = _shader
 	body.material = _mat
 	add_child(body)
+	overlay = Sprite2D.new()
+	overlay.centered = false
+	overlay.offset = -CreatureSprites.ANCHOR
+	overlay.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	overlay.material = _mat
+	overlay.z_index = 3
+	overlay.hide()
+	add_child(overlay)
 	status_fx = StatusFX.new()
 	status_fx.view = self
 	add_child(status_fx)
@@ -59,6 +68,7 @@ func set_species(id: String, right := false) -> void:
 	species = id
 	facing_right = right
 	body.flip_h = right
+	overlay.flip_h = right
 	_set = CreatureSprites.get_set(id)
 	_mat.set_shader_parameter("flash", 0.0)
 	_mat.set_shader_parameter("tint", Color.WHITE)
@@ -86,24 +96,41 @@ func _anim_data() -> Dictionary:
 func _show_frame() -> void:
 	var a := _anim_data()
 	body.texture = _set.frames[int(a.frames[_frame])]
+	if a.has("overlay"):
+		overlay.texture = _set.frames[int(a.overlay[_frame])]
+		overlay.show()
+	else:
+		overlay.hide()
 
 
 ## Toca uma animação até o fim (as em loop voltam na hora). Com dash, avança na
-## direção do alvo conforme o quanto a pose está esticada (reach).
+## direção do alvo conforme o quanto a pose está esticada (reach). Com dash "onto"
+## (constrição), vai até ficar em cima do alvo: o ponto "grab" do quadro encaixa no
+## centro dele, o corpo fica atrás do alvo e a camada da frente por cima.
 func play(name: String, target_global := Vector2.ZERO, contact := false) -> void:
 	_start(name)
 	_home = position
-	_dashing = contact and _anim_data().get("dash", false) and target_global != Vector2.ZERO
+	var dash = _anim_data().get("dash", false)
+	var has_dash: bool = dash if dash is bool else str(dash) != ""
+	_dashing = contact and has_dash and target_global != Vector2.ZERO
 	if _dashing:
 		var parent := get_parent()
 		var to: Vector2 = (parent as Node2D).to_local(target_global) if parent is Node2D else target_global
 		var d: Vector2 = to - position
-		# para um pouco antes do alvo
-		_dash = d - d.normalized() * 70.0
+		if str(dash) == "onto":
+			var g := CreatureSprites.point(species, "grab") - CreatureSprites.ANCHOR
+			if facing_right:
+				g.x = -g.x
+			_dash = d - g * scale
+			z_index = 1  # corpo atrás do alvo (que sobe para 2), voltas da frente por cima
+		else:
+			# para um pouco antes do alvo
+			_dash = d - d.normalized() * 70.0
 	if _anim_data().get("loop", false):
 		return
 	await finished
 	position = _home
+	z_index = 0
 
 
 func _process(delta: float) -> void:

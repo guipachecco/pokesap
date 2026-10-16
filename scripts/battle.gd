@@ -302,9 +302,11 @@ func start(wild: Creature, zone_id: String) -> void:
 	var tw := create_tween()
 	tw.tween_property(enemy_spr, "position", ENEMY_POS, 0.9)
 	await tw.finished
-	enemy_spr.play("idle")
+	# vira para o jogador ao aparecer, depois assume a pose de batalha
+	enemy_spr.play("front")
 	enemy_box.show()
 	await msg.say("%s selvagem apareceu!" % enemy.display_name())
+	enemy_spr.play("idle")
 	await _send_out(mine)
 	await _battle_loop()
 
@@ -676,8 +678,13 @@ func _use_move(user: Creature, target: Creature, move_id: String, slot_idx: int)
 	var anim: String = m.get("anim", "tackle")
 	if self_move:
 		anim = "buff"
+	# constrição em alvo grande: as voltas pegam só a frente do corpo
+	if anim == "constrict" and target.data().get("size", "") == "big":
+		anim = "constrict_big"
 	if not uv.has_anim(anim):
 		anim = "tackle" if contact else "shoot"
+	# na constrição o alvo fica entre o corpo e as voltas da frente
+	tv.z_index = 2 if anim.begins_with("constrict") else 0
 
 	# acerto ou erro é decidido antes, para o alvo poder desviar na hora certa
 	var acc: float = m.acc
@@ -781,6 +788,8 @@ func _wait_anim(done: Array) -> void:
 	while not done[0] and t < 3.0:
 		await get_tree().process_frame
 		t += get_process_delta_time()
+	enemy_spr.z_index = 0
+	mine_spr.z_index = 0
 
 
 ## Efeitos do golpe além do dano: estágios (Ataque, Defesa...) e efeitos de estado.

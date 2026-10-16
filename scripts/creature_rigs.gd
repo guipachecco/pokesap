@@ -32,6 +32,8 @@ static func has_rig(species: String) -> bool:
 
 
 static func build(species: String, pose: Dictionary) -> Array:
+	if pose.get("view", "") == "front":
+		return _front(species, pose)
 	match species:
 		"jiboia": return _jiboia(pose)
 		"arara": return _arara(pose)
@@ -105,6 +107,8 @@ static func _sparks(c: Vector2, r: float, n: int, z: int, seed_val := 0) -> Arra
 ## Jiboia enrolada no chão, pescoço em S erguido. Bote: recolhe a cabeça (coil),
 ## dispara para a frente (reach) com a boca aberta (jaw).
 static func _jiboia(pose: Dictionary) -> Array:
+	if _p(pose, "wrap") > 0.0:
+		return _jiboia_wrap(pose)
 	var ox := _p(pose, "x")
 	var oy := _p(pose, "y") + _p(pose, "bob")
 	var coil := _p(pose, "coil")
@@ -178,6 +182,70 @@ static func _jiboia(pose: Dictionary) -> Array:
 		var t1: Vector2 = hp.call(-15, 0.5)
 		parts.append({"shapes": [["cap", t0.x, t0.y, t1.x, t1.y, 0.55, 0.55], ["cap", t1.x, t1.y, t1.x - 2, t1.y - 1.4, 0.5, 0.5], ["cap", t1.x, t1.y, t1.x - 2, t1.y + 1.4, 0.5, 0.5]],
 			"color": "d0384a", "mat": "flat", "z": 4, "outline": false})
+	return parts
+
+
+## Ponto do quadro que fica em cima do centro do alvo durante a constrição.
+const GRAB := Vector2(48, 50)
+
+
+## Constrição: a jiboia está em cima do alvo (o centro dele fica em GRAB) e enrola o
+## corpo em voltas inclinadas. A metade de cima de cada volta fica atrás do alvo e a
+## metade de baixo na frente (layer "front"). squeeze aperta as voltas; big = alvo
+## grande (capivara, jacaré): as voltas pegam só o pescoço e a frente do corpo.
+static func _jiboia_wrap(pose: Dictionary) -> Array:
+	var wrap := clampf(_p(pose, "wrap"), 0.0, 1.0)
+	var sq := _p(pose, "squeeze")
+	var big := _p(pose, "big") > 0.5
+	var body := "b48c58"
+	var saddle := "5e3c22"
+	var belly := "e6d3a2"
+	var parts := []
+	var c := GRAB + (Vector2(-14, -6) if big else Vector2.ZERO)
+	var n := 3 if not big else 2
+	var shown := ceili(wrap * n)
+	var rx := (21.0 if not big else 15.0) - sq * 3.5
+	var ry := 6.0 - sq * 1.0
+	var th := 3.2 + sq * 0.6
+	# corpo que vem do chão (à direita) até as voltas
+	var base := Vector2(86, 74)
+	var last := c + Vector2(rx, (n - 1) * 7.0 - 7.0)
+	parts.append({"shapes": [["bez", [base.x, base.y, base.x - 6, base.y - 14, last.x + 10, last.y + 8, last.x, last.y], 4.6, th]], "color": body, "mat": "scales", "z": 0, "group": "corpo",
+		"marks": _saddles([base.x, base.y, base.x - 6, base.y - 14, last.x + 10, last.y + 8, last.x, last.y], saddle, 3, 4.0)})
+	for i in shown:
+		var cy := c.y + (i - (n - 1) / 2.0) * 7.5
+		var ang := -12.0 + i * 6.0
+		var ring := [["e", c.x, cy, rx + th, ry + th, ang], ["-", ["e", c.x, cy, rx - th, maxf(0.5, ry - th), ang]]]
+		var spots := []
+		for k in 6:
+			var a := k * TAU / 6.0 + i
+			spots.append(["e", c.x + cos(a) * rx, cy + sin(a) * ry, 2.2, 1.6, ang])
+		# metade de trás (em cima), atrás do alvo
+		parts.append({"shapes": ring + [["-", ["r", c.x - 40, cy, 80, 30]]], "color": body, "mat": "scales", "z": 1, "group": "volta_t%d" % i, "round": 2.0,
+			"marks": [{"shapes": spots, "color": saddle}]})
+		# metade da frente (embaixo), na frente do alvo
+		parts.append({"shapes": ring + [["-", ["r", c.x - 40, cy - 30, 80, 30]]], "color": body, "mat": "scales", "z": 10 + i, "group": "volta_f%d" % i, "round": 2.0, "layer": "front",
+			"marks": [{"shapes": spots, "color": saddle}, {"shapes": [["e", c.x, cy + ry * 0.9, rx * 0.8, 1.2, ang]], "color": belly}]})
+	# cabeça apoiada em cima do alvo, olhando para ele, boca aberta no aperto
+	var top := c + Vector2(-rx * 0.6, -((n - 1) / 2.0) * 7.5 - ry - 6) + Vector2(0, -4 * (1.0 - wrap))
+	var hang := 25.0 + 10.0 * sq
+	var head_poly := []
+	for v in [Vector2(-10, -1), Vector2(-6, -4.5), Vector2(2, -5), Vector2(7, -3), Vector2(8, 1), Vector2(2, 3), Vector2(-9, 1.5)]:
+		var p: Vector2 = top + v.rotated(deg_to_rad(hang)) * 1.3
+		head_poly.append_array([p.x, p.y])
+	var neck_end := top + Vector2(8, 1).rotated(deg_to_rad(hang)) * 1.3
+	var first := c + Vector2(-rx, -((n - 1) / 2.0) * 7.5)
+	parts.append({"shapes": [["bez", [first.x, first.y, first.x - 4, first.y - 10, neck_end.x + 6, neck_end.y - 4, neck_end.x, neck_end.y], th + 0.6, 4.0]], "color": body, "mat": "scales", "z": 14, "group": "cabeca", "layer": "front"})
+	parts.append({"shapes": [["poly", head_poly]], "color": body, "mat": "scales", "z": 15, "group": "cabeca", "round": 3.0, "layer": "front",
+		"marks": [{"shapes": [["cap", top.x - 3, top.y - 4, top.x + 7, top.y - 1, 1.2, 1.4]], "color": saddle}]})
+	if sq > 0.5:
+		var m := top + Vector2(-8, 3).rotated(deg_to_rad(hang)) * 1.3
+		parts.append({"shapes": [["e", m.x, m.y, 2.2, 1.4, hang]], "color": "b23a48", "mat": "flat", "z": 16, "outline": false, "layer": "front"})
+	var e := top + Vector2(-2.5, -2.2).rotated(deg_to_rad(hang)) * 1.3
+	var eye := _eye(e.x, e.y, 1.6, "e2a83a", false, true, 17)
+	for p in eye:
+		p["layer"] = "front"
+	parts.append_array(eye)
 	return parts
 
 
@@ -1006,6 +1074,419 @@ static func _poraque(pose: Dictionary) -> Array:
 	parts.append_array(_eye(e.x, e.y, 1.1, "2a2a20", _closed(pose), false, 8))
 	if _p(pose, "glow") > 0.5 or _p(pose, "spit") > 0.5 or (jaw > 0.9 and reach < 0.5):
 		parts.append_array(_sparks(Vector2(54, 54) + o, 22, 7, 20, int(wave * 10)))
+	return parts
+
+
+# ---------------------------------------------------------------- vistas de frente
+
+## Criatura olhando para a câmera (encontros, diálogos, exploração). Cada espécie tem a
+## sua pose, montada com a mesma luz, textura e contorno da vista de lado.
+static func _front(species: String, pose: Dictionary) -> Array:
+	match species:
+		"mico":
+			return _front_quad(pose, {"fur": "e8922a", "belly": "f4b450", "dark": "b8701c", "w": 11.0, "h": 11.0, "head_r": 7.5,
+				"snout": 3.0, "nose": "1e100c", "face": "5a3424", "mane": "f6b84a", "tail": "long", "leg": 2.4})
+		"capivara":
+			return _front_quad(pose, {"fur": "8e6a44", "belly": "a8845a", "dark": "5a3e28", "w": 17.0, "h": 13.0, "head_r": 10.0,
+				"snout": 7.0, "nose": "3a2a20", "ear": 2.6, "leg": 3.6, "square": true})
+		"quati":
+			return _front_quad(pose, {"fur": "a86c3c", "belly": "d8b07c", "dark": "4a3020", "w": 11.0, "h": 9.0, "head_r": 7.0,
+				"snout": 9.0, "nose": "1e1612", "ear": 2.2, "leg": 2.4, "mask": "f0e2c4", "tail": "ringed"})
+		"tatu":
+			return _front_tatu(pose)
+		"arara":
+			return _front_bird(pose, {"body": "2c52c8", "dark": "203c9c", "beak": "hook", "ring": "f8d42a", "jaw_mark": "f6c81e"})
+		"tucano":
+			return _front_bird(pose, {"body": "2a2a30", "dark": "18181e", "beak": "toucan", "ring": "4aa0e8", "bib": "f6f0dc"})
+		"jiboia":
+			return _front_snake(pose)
+		"jacare":
+			return _front_jacare(pose)
+		"sapo":
+			return _front_frog(pose, {"skin": "a87c4a", "belly": "e8d8a8", "spots": "7a5630", "mat": "skin", "iris": "d8a838", "gland": "c89a62", "k": 1.15})
+		"perereca":
+			return _front_frog(pose, {"skin": "54c444", "belly": "f0f4c8", "spots": "", "mat": "smooth", "iris": "e83a2a", "k": 0.95, "pads": true})
+		"besouro":
+			return _front_beetle(pose)
+		"morfo":
+			return _front_butterfly(pose)
+		"aranha":
+			return _front_spider(pose)
+		"poraque":
+			return _front_eel(pose)
+		"caranguejo":
+			return _caranguejo(pose)  # o caranguejo já é desenhado de frente
+	return build(species, {})
+
+
+
+
+static func _front_quad(pose: Dictionary, s: Dictionary) -> Array:
+	var o := Vector2(_p(pose, "x"), _p(pose, "y") + _p(pose, "bob"))
+	var jaw := _p(pose, "jaw")
+	var w: float = s.w
+	var h: float = s.h
+	var fur: String = s.fur
+	var dark: String = s.dark
+	var parts := []
+	var bc := Vector2(48, 76 - h - 6) + o + Vector2(0, -_p(pose, "breath") * 0.5)
+	var lr: float = s.leg
+	# rabo atrás do corpo, saindo de um lado
+	if s.get("tail", "") == "ringed":
+		var t0 := bc + Vector2(6, -4)
+		var pts := [t0.x, t0.y, t0.x + 14, t0.y - 6, t0.x + 16, t0.y - 24, t0.x + 10, t0.y - 32]
+		var rings := []
+		for i in 5:
+			var c := CreatureArt._bez(pts, 0.25 + i * 0.16)
+			rings.append(["c", c.x, c.y, 2.5])
+		parts.append({"shapes": [["bez", pts, 3.4, 2.0]], "color": "c8925a", "mat": "fur", "z": 0, "group": "rabo", "round": 2.5,
+			"marks": [{"shapes": rings, "color": "4a3020"}]})
+	elif s.get("tail", "") == "long":
+		var t0 := bc + Vector2(6, 2)
+		var pts := [t0.x, t0.y, t0.x + 16, t0.y + 2, t0.x + 20, t0.y + 14, t0.x + 14, t0.y + 20]
+		parts.append({"shapes": [["bez", pts, 2.8, 2.0]], "color": dark, "mat": "fur", "z": 0, "group": "rabo", "round": 2.0,
+			"marks": [{"shapes": [["c", pts[6], pts[7], 2.8]], "color": "8a5014"}]})
+	# patas de trás (aparecem por fora) e da frente
+	for sd: int in [-1, 1]:
+		var hx := 48.0 + sd * (w * 0.75) + o.x
+		parts.append({"shapes": [["cap", hx, bc.y + 2, hx + sd * 1.5, 75 + o.y, lr + 0.6, lr * 0.8], ["e", hx + sd * 1.5, 75 + o.y, lr + 0.8, lr * 0.5]],
+			"color": dark, "mat": "fur", "z": 1, "group": "pata_t%d" % sd, "round": 2.0})
+	parts.append({"shapes": [["e", bc.x, bc.y, w, h]], "color": fur, "mat": "fur", "z": 2, "group": "corpo", "round": 7.0, "po": o,
+		"marks": [{"shapes": [["e", bc.x, bc.y + h * 0.3, w * 0.55, h * 0.6]], "color": s.belly}]})
+	for sd: int in [-1, 1]:
+		var fx := 48.0 + sd * (w * 0.4) + o.x
+		parts.append({"shapes": [["cap", fx, bc.y + 2, fx, 75 + o.y, lr + 0.5, lr * 0.8], ["e", fx, 75 + o.y, lr + 0.8, lr * 0.55]],
+			"color": fur, "mat": "fur", "z": 4, "group": "pata%d" % sd, "round": 2.0,
+			"marks": [{"shapes": [["e", fx, 75 + o.y, lr + 0.8, lr * 0.55]], "color": dark}]})
+	# cabeça
+	var hr: float = s.head_r
+	var hc := Vector2(48, bc.y - h - hr * 0.35) + Vector2(o.x, 0)
+	if s.has("mane"):
+		var ms := [["c", hc.x, hc.y, hr + 5.5]]
+		for i in 12:
+			var a := i * TAU / 12.0
+			ms.append(["e", hc.x + cos(a) * (hr + 5), hc.y + sin(a) * (hr + 5), 3.4, 2.4, rad_to_deg(a)])
+		parts.append({"shapes": ms, "color": s.mane, "mat": "fur", "z": 5, "group": "juba", "round": 4.0, "po": hc - Vector2(48, 30)})
+	if s.get("ear", 0.0) > 0.0:
+		for sd: int in [-1, 1]:
+			parts.append({"shapes": [["c", hc.x + sd * hr * 0.8, hc.y - hr * 0.75, s.ear]], "color": dark, "mat": "fur", "z": 5, "group": "orelha%d" % sd, "round": 1.5})
+	var head_shape := ["e", hc.x, hc.y, hr * (1.1 if s.get("square", false) else 1.0), hr * 0.95]
+	var hm := []
+	if s.has("mask"):
+		hm.append({"shapes": [["e", hc.x - 3.5, hc.y, 2.8, 2.2], ["e", hc.x + 3.5, hc.y, 2.8, 2.2]], "color": s.mask})
+	if s.has("face"):
+		hm.append({"shapes": [["e", hc.x, hc.y + 1, hr * 0.78, hr * 0.85]], "color": s.face})
+	parts.append({"shapes": [head_shape], "color": fur, "mat": "fur", "z": 6, "group": "cabeca", "round": 4.0, "po": hc - Vector2(48, 30), "marks": hm})
+	# focinho visto de frente (fica mais baixo e mais largo)
+	var sn: float = s.snout
+	var sc := hc + Vector2(0, hr * 0.45 + sn * 0.15)
+	parts.append({"shapes": [["e", sc.x, sc.y, maxf(3.0, sn * 0.45), maxf(2.6, sn * 0.38)]], "color": s.face if s.has("face") else fur, "mat": "fur", "z": 7, "group": "focinho", "round": 2.0})
+	parts.append({"shapes": [["e", sc.x, sc.y - sn * 0.12, 1.8, 1.2]], "color": s.nose, "mat": "shiny", "z": 8, "outline": false, "round": 1.0})
+	if jaw > 0.05:
+		parts.append({"shapes": [["e", sc.x, sc.y + 2.5, 2.4, 1.0 + 1.8 * jaw]], "color": "8a2a30", "mat": "flat", "z": 8, "outline": false})
+	for sd: int in [-1, 1]:
+		parts.append_array(_eye(hc.x + sd * hr * 0.42, hc.y - hr * 0.15, 1.5, "3a2214", _closed(pose), false, 10))
+	return parts
+
+
+static func _front_tatu(pose: Dictionary) -> Array:
+	var o := Vector2(_p(pose, "x"), _p(pose, "y") + _p(pose, "bob") * 0.5)
+	var shell := "b8956a"
+	var band := "8a6a46"
+	var skin := "dcb896"
+	var parts := []
+	var c := Vector2(48, 60) + o
+	for sd: int in [-1, 1]:
+		parts.append({"shapes": [["cap", c.x + sd * 9, c.y + 6, c.x + sd * 11, 75 + o.y, 3.0, 2.4]], "color": "c8a07a", "mat": "skin", "z": 1, "group": "pata%d" % sd, "round": 2.0})
+	var arcs := []
+	for i in 3:
+		arcs.append(["e", c.x, c.y - 2 + i * 4, 17.0 - i, 1.0])
+	parts.append({"shapes": [["e", c.x, c.y - 2, 18, 14], ["-", ["r", c.x - 20, c.y + 8, 40, 20]]], "color": shell, "mat": "chitin", "z": 2, "group": "casco", "round": 6.0,
+		"marks": [{"shapes": arcs, "color": band}]})
+	# cabeça triangular para baixo, orelhas em pé
+	var hc := c + Vector2(0, 2)
+	for sd: int in [-1, 1]:
+		parts.append({"shapes": [["e", hc.x + sd * 5, hc.y - 7, 2.0, 3.6, sd * 15]], "color": "c8a07a", "mat": "skin", "z": 3, "group": "orelha%d" % sd, "round": 1.5})
+	parts.append({"shapes": [["poly", [hc.x - 6, hc.y - 4, hc.x + 6, hc.y - 4, hc.x + 2, hc.y + 9, hc.x - 2, hc.y + 9]]], "color": skin, "mat": "skin", "z": 4, "group": "cabeca", "round": 3.0,
+		"marks": [{"shapes": [["poly", [hc.x - 6, hc.y - 4, hc.x + 6, hc.y - 4, hc.x + 3, hc.y, hc.x - 3, hc.y]]], "color": shell}]})
+	parts.append({"shapes": [["c", hc.x, hc.y + 8, 1.2]], "color": "3a2418", "mat": "flat", "z": 6, "outline": false})
+	for sd: int in [-1, 1]:
+		parts.append_array(_eye(hc.x + sd * 2.6, hc.y + 1, 1.1, "2a1810", _closed(pose), false, 8))
+	return parts
+
+
+static func _front_bird(pose: Dictionary, s: Dictionary) -> Array:
+	var o := Vector2(_p(pose, "x"), _p(pose, "y") + _p(pose, "bob"))
+	var jaw := _p(pose, "jaw")
+	var wing := _p(pose, "wing")
+	var body: String = s.body
+	var dark: String = s.dark
+	var parts := []
+	var bc := Vector2(48, 52) + o
+	# rabo atrás, aparecendo embaixo
+	parts.append({"shapes": [["cap", 48 + o.x, bc.y + 10, 48 + o.x, 78 + o.y, 4.0, 2.4]], "color": dark, "mat": "feather", "z": 0, "group": "rabo", "round": 2.0})
+	for sd: int in [-1, 1]:
+		var lx := 48.0 + sd * 5 + o.x
+		parts.append({"shapes": [["cap", lx, bc.y + 12, lx, 72 + o.y, 1.8, 1.5], ["cap", lx, 72 + o.y, lx + sd * 3, 74 + o.y, 1.2, 1.0], ["cap", lx, 72 + o.y, lx - sd * 2, 74.5 + o.y, 1.2, 1.0]],
+			"color": "707078", "mat": "skin", "z": 1, "group": "perna%d" % sd, "round": 2.0})
+	var bm := []
+	if s.has("bib"):
+		bm.append({"shapes": [["e", bc.x, bc.y - 8, 7, 8]], "color": s.bib})
+	parts.append({"shapes": [["e", bc.x, bc.y, 11.5, 15]], "color": body, "mat": "feather", "z": 2, "group": "corpo", "round": 6.0, "po": o, "marks": bm})
+	# asas: dobradas dos lados ou abertas
+	for sd: int in [-1, 1]:
+		if wing > 0.3:
+			var sh := bc + Vector2(sd * 9, -8)
+			var shapes := []
+			for i in 5:
+				var a := deg_to_rad(10 + i * 14 + 25 * wing)
+				var tip := sh + Vector2(sd * cos(a), -sin(a)) * (24 - absf(i - 2) * 3)
+				shapes.append(["cap", sh.x, sh.y, tip.x, tip.y, 3.6, 1.5])
+			parts.append({"shapes": shapes, "color": body, "mat": "feather", "z": 3, "group": "asa%d" % sd, "round": 3.0})
+		else:
+			parts.append({"shapes": [["e", bc.x + sd * 10, bc.y + 2, 4.5, 13, sd * -8]], "color": body, "mat": "feather", "z": 3, "group": "asa%d" % sd, "round": 3.0,
+				"marks": [{"shapes": [["e", bc.x + sd * 10.5, bc.y + 9, 3.6, 6, sd * -8]], "color": dark}]})
+	var hc := bc + Vector2(0, -20)
+	var hm := []
+	if s.has("bib"):
+		hm.append({"shapes": [["e", hc.x, hc.y + 6, 6, 4]], "color": s.bib})
+	parts.append({"shapes": [["c", hc.x, hc.y, 10]], "color": body, "mat": "feather", "z": 5, "group": "corpo", "round": 5.0, "po": hc - Vector2(48, 32), "marks": hm})
+	for sd: int in [-1, 1]:
+		var ec := hc + Vector2(sd * 5.5, -2)
+		parts.append({"shapes": [["c", ec.x, ec.y, 2.9]], "color": s.ring, "mat": "smooth", "z": 6, "outline": false, "round": 1.5})
+		parts.append_array(_eye(ec.x, ec.y, 1.4, "2a1e14", _closed(pose), false, 7))
+	if s.beak == "hook":
+		# bico curvo visto de frente: maxila em gancho no meio e mandíbula embaixo
+		parts.append({"shapes": [["e", hc.x, hc.y + 7 + jaw * 2, 4.2, 2.8]], "color": "3c3c48", "mat": "shiny", "z": 11, "group": "bico_baixo", "round": 1.5,
+			"marks": [{"shapes": [["e", hc.x, hc.y + 5.5 + jaw * 2, 3.6, 1.0]], "color": s.jaw_mark}]})
+		parts.append({"shapes": [["poly", [hc.x - 4.5, hc.y + 1, hc.x + 4.5, hc.y + 1, hc.x + 2, hc.y + 7, hc.x, hc.y + 10, hc.x - 2, hc.y + 7]]], "color": "44444f", "mat": "shiny", "z": 12, "group": "bico", "round": 2.0})
+	else:
+		# bico do tucano apontado para a câmera: um oval enorme na frente do rosto
+		parts.append({"shapes": [["e", hc.x - 2, hc.y + 9 + jaw * 2, 6.5, 9, 18]], "color": "f78c1e", "mat": "shiny", "z": 12, "group": "bico", "round": 3.0,
+			"marks": [{"shapes": [["e", hc.x - 4, hc.y + 15 + jaw * 2, 3.5, 3.2]], "color": "2a2a2a"}, {"shapes": [["e", hc.x + 1, hc.y + 3, 4, 1.6, 18]], "color": "f8c440"}]})
+	return parts
+
+
+static func _front_snake(pose: Dictionary) -> Array:
+	var o := Vector2(_p(pose, "x"), _p(pose, "y") + _p(pose, "bob"))
+	var jaw := _p(pose, "jaw")
+	var body := "b48c58"
+	var saddle := "5e3c22"
+	var belly := "e6d3a2"
+	var parts := []
+	# voltas empilhadas no chão
+	var coils := [[Vector2(48, 71), 22.0, 6.5], [Vector2(48, 64), 18.0, 6.0], [Vector2(48, 58), 14.0, 5.5]]
+	for i in coils.size():
+		var c: Vector2 = coils[i][0] + o * Vector2(1, 0.3)
+		var rx: float = coils[i][1]
+		var ry: float = coils[i][2]
+		var sad := []
+		for k in 5:
+			sad.append(["e", c.x - rx + 5 + k * (rx * 2 - 10) / 4.0, c.y - 1, 2.6, ry * 0.7])
+		parts.append({"shapes": [["e", c.x, c.y, rx, ry]], "color": body, "mat": "scales", "z": 3 - i, "group": "volta%d" % i, "round": 4.0,
+			"marks": [{"shapes": sad, "color": saddle}, {"shapes": [["e", c.x, c.y + ry * 0.55, rx * 0.8, ry * 0.3]], "color": belly}]})
+	# pescoço subindo e cabeça larga de frente
+	var hc := Vector2(48, 34) + o
+	parts.append({"shapes": [["bez", [48 + o.x, 58 + o.y * 0.3, 44 + o.x, 50 + o.y, 52 + o.x, 44 + o.y, hc.x, hc.y + 5], 5.0, 4.2]], "color": body, "mat": "scales", "z": 4, "group": "pescoco", "round": 3.0,
+		"marks": [{"shapes": [["bez", [48 + o.x, 60 + o.y * 0.3, 45 + o.x, 52 + o.y, 51 + o.x, 46 + o.y, hc.x, hc.y + 8], 2.2, 1.8]], "color": belly}]})
+	parts.append({"shapes": [["poly", [hc.x - 9, hc.y - 3, hc.x - 5, hc.y - 7, hc.x + 5, hc.y - 7, hc.x + 9, hc.y - 3, hc.x + 5, hc.y + 6, hc.x - 5, hc.y + 6]]], "color": body, "mat": "scales", "z": 6, "group": "cabeca", "round": 3.0,
+		"marks": [{"shapes": [["cap", hc.x, hc.y - 6, hc.x, hc.y + 1, 1.6, 1.0]], "color": saddle}]})
+	if jaw > 0.05:
+		parts.append({"shapes": [["e", hc.x, hc.y + 6, 4, 1.5 + 2.5 * jaw]], "color": "b23a48", "mat": "flat", "z": 7, "outline": false})
+	elif _p(pose, "tongue") > 0.5 or _p(pose, "breath") > 0.5:
+		parts.append({"shapes": [["cap", hc.x, hc.y + 5, hc.x, hc.y + 10, 0.5, 0.5], ["cap", hc.x, hc.y + 10, hc.x - 1.5, hc.y + 12, 0.45, 0.45], ["cap", hc.x, hc.y + 10, hc.x + 1.5, hc.y + 12, 0.45, 0.45]],
+			"color": "d0384a", "mat": "flat", "z": 7, "outline": false})
+	for sd: int in [-1, 1]:
+		parts.append_array(_eye(hc.x + sd * 6, hc.y - 2.5, 1.6, "e2a83a", _closed(pose), true, 9))
+		parts.append({"shapes": [["c", hc.x + sd * 2, hc.y + 3, 0.6]], "color": "2a1a12", "mat": "flat", "z": 9, "outline": false})
+	return parts
+
+
+static func _front_jacare(pose: Dictionary) -> Array:
+	var o := Vector2(_p(pose, "x"), _p(pose, "y") + _p(pose, "bob") * 0.5)
+	var jaw := _p(pose, "jaw")
+	var hide := "56683c"
+	var dark := "34442a"
+	var parts := []
+	# corpo baixo atrás da cabeça e o rabo saindo de lado, rente ao chão
+	parts.append({"shapes": [["bez", [60 + o.x, 62 + o.y, 74 + o.x, 60 + o.y, 84 + o.x, 66 + o.y, 90 + o.x, 72 + o.y], 6.0, 1.8]], "color": hide, "mat": "scales", "z": 0, "group": "corpo", "round": 3.0,
+		"marks": [{"shapes": [["c", 70 + o.x, 58.5 + o.y, 1.4], ["c", 78 + o.x, 60 + o.y, 1.2], ["c", 84 + o.x, 64 + o.y, 1.0]], "color": dark}]})
+	var scutes := []
+	for i in 4:
+		scutes.append(["e", 40 + i * 5.5 + o.x, 53 + o.y, 1.8, 1.3])
+	parts.append({"shapes": [["e", 48 + o.x, 60 + o.y, 19, 8.5]], "color": hide, "mat": "scales", "z": 1, "group": "corpo", "round": 5.0,
+		"marks": [{"shapes": scutes, "color": dark}]})
+	for sd: int in [-1, 1]:
+		var f := Vector2(48 + sd * 22 + o.x, 74 + o.y)
+		parts.append({"shapes": [["cap", 48 + sd * 13 + o.x, 64 + o.y, f.x, f.y, 3.4, 2.4], ["e", f.x + sd, f.y, 3.6, 1.6]], "color": hide, "mat": "scales", "z": 2, "group": "pata%d" % sd, "round": 2.0})
+	# cabeça larga e achatada vista de frente
+	var hc := Vector2(48, 66) + o
+	if jaw > 0.05:
+		parts.append({"shapes": [["e", hc.x, hc.y + 4, 13, 2 + 5 * jaw]], "color": "c8606a", "mat": "smooth", "z": 4, "group": "boca"})
+		var teeth := []
+		for i in 7:
+			var tx := hc.x - 11 + i * 3.6
+			teeth.append(["poly", [tx - 0.8, hc.y + 1.5, tx + 0.8, hc.y + 1.5, tx, hc.y + 3.8]])
+		parts.append({"shapes": teeth, "color": "fff6e6", "mat": "flat", "z": 8, "outline": false})
+	parts.append({"shapes": [["e", hc.x, hc.y + 6 + jaw * 4, 14, 3.2]], "color": "d8d49a", "mat": "scales", "z": 5, "group": "mandibula", "round": 2.0,
+		"marks": [{"shapes": [["e", hc.x, hc.y + 7 + jaw * 4, 9, 2]], "color": "f0d040"}]})
+	parts.append({"shapes": [["e", hc.x, hc.y, 15, 5.5]], "color": hide, "mat": "scales", "z": 6, "group": "cabeca", "round": 3.0})
+	if jaw <= 0.05:
+		var teeth := []
+		for i in 5:
+			var tx := hc.x - 9 + i * 4.5
+			teeth.append(["poly", [tx - 0.7, hc.y + 4.5, tx + 0.7, hc.y + 4.5, tx, hc.y + 6.2]])
+		parts.append({"shapes": teeth, "color": "fff6e6", "mat": "flat", "z": 7, "outline": false})
+	for sd: int in [-1, 1]:
+		var e := hc + Vector2(sd * 7, -6)
+		parts.append({"shapes": [["e", e.x, e.y + 0.5, 3.2, 2.6]], "color": hide, "mat": "scales", "z": 8, "group": "olho%d" % sd, "round": 1.5})
+		parts.append_array(_eye(e.x, e.y, 1.5, "c8a020", _closed(pose), true, 10))
+		parts.append({"shapes": [["c", hc.x + sd * 2.5, hc.y - 3, 0.8]], "color": dark, "mat": "flat", "z": 9, "outline": false})
+	return parts
+
+
+static func _front_frog(pose: Dictionary, s: Dictionary) -> Array:
+	var o := Vector2(_p(pose, "x"), _p(pose, "y") + _p(pose, "bob") * 0.5)
+	var jaw := _p(pose, "jaw")
+	var k: float = s.k
+	var skin: String = s.skin
+	var parts := []
+	var bc := Vector2(48, 76 - 12 * k) + o
+	# pernas de trás dobradas dos lados
+	for sd: int in [-1, 1]:
+		var th := bc + Vector2(sd * 14, 2) * k
+		parts.append({"shapes": [["e", th.x, th.y, 7 * k, 6 * k, sd * 20], ["cap", th.x + sd * 2, th.y + 4, th.x + sd * 8 * k, 75 + o.y, 2 * k, 1.6 * k]],
+			"color": skin, "mat": s.mat, "z": 0, "group": "perna%d" % sd, "round": 3.0,
+			"marks": ([{"shapes": [["c", th.x + sd * 8 * k, 75 + o.y, 1.8]], "color": s.belly}] if s.get("pads", false) else [])})
+	var spots := []
+	if s.spots != "":
+		for i in 5:
+			spots.append(["c", bc.x - 10 + i * 5, bc.y - 6 + (i % 2) * 3, 1.6 * k])
+	var bm := [{"shapes": [["e", bc.x, bc.y + 5 * k, 11 * k, 5 * k]], "color": s.belly}]
+	if not spots.is_empty():
+		bm.append({"shapes": spots, "color": s.spots})
+	parts.append({"shapes": [["e", bc.x, bc.y, 16 * k, 11 * k]], "color": skin, "mat": s.mat, "z": 1, "group": "corpo", "round": 7.0, "po": o, "marks": bm})
+	# braços
+	for sd: int in [-1, 1]:
+		var sh := bc + Vector2(sd * 7, 5) * k
+		var hand := Vector2(sh.x + sd * 2, 75 + o.y)
+		parts.append({"shapes": [["cap", sh.x, sh.y, hand.x, hand.y, 2.2 * k, 1.6 * k], ["cap", hand.x, hand.y, hand.x + sd * 3, hand.y + 0.5, 1.1, 1.0], ["cap", hand.x, hand.y, hand.x - sd * 1, hand.y + 0.8, 1.1, 1.0]],
+			"color": skin, "mat": s.mat, "z": 3, "group": "braco%d" % sd, "round": 2.0})
+	# cabeça larga com boca enorme
+	var hc := bc + Vector2(0, -9) * k
+	parts.append({"shapes": [["e", hc.x, hc.y, 13 * k, 7.5 * k]], "color": skin, "mat": s.mat, "z": 2, "group": "corpo", "round": 4.0, "po": hc - Vector2(48, 50)})
+	if jaw > 0.05:
+		parts.append({"shapes": [["e", hc.x, hc.y + 4 * k, 9 * k, 1.5 + 3 * jaw]], "color": "c8606a", "mat": "flat", "z": 5, "outline": false})
+	else:
+		parts.append({"shapes": [["bez", [hc.x - 10 * k, hc.y + 2, hc.x, hc.y + 6 * k, hc.x + 10 * k, hc.y + 2], 0.5, 0.5]], "color": "3a2a1a", "mat": "flat", "z": 5, "outline": false})
+	if s.has("gland"):
+		for sd: int in [-1, 1]:
+			parts.append({"shapes": [["e", hc.x + sd * 10 * k, hc.y - 1, 3.5, 2.2, sd * 30]], "color": s.gland, "mat": "skin", "z": 4, "group": "glandula%d" % sd, "round": 2.0})
+	for sd: int in [-1, 1]:
+		var ec := hc + Vector2(sd * 6.5, -5.5) * k
+		parts.append({"shapes": [["c", ec.x, ec.y, 4.0 * k]], "color": skin, "mat": s.mat, "z": 6, "group": "olho%d" % sd, "round": 2.0})
+		if _closed(pose):
+			parts.append({"shapes": [["cap", ec.x - 2.5, ec.y, ec.x + 2.5, ec.y, 0.6, 0.6]], "color": "2a1a1a", "mat": "flat", "z": 8, "outline": false})
+		else:
+			parts.append({"shapes": [["c", ec.x, ec.y - 0.3, 2.8 * k]], "color": s.iris, "mat": "flat", "z": 7, "outline": false})
+			parts.append({"shapes": [["e", ec.x, ec.y - 0.3, 2.0 * k, 0.9]], "color": "141010", "mat": "flat", "z": 8, "outline": false})
+			parts.append({"shapes": [["c", ec.x - 1.1, ec.y - 1.5, 0.8]], "color": "ffffff", "mat": "flat", "z": 9, "outline": false})
+		parts.append({"shapes": [["c", hc.x + sd * 2, hc.y - 1, 0.6]], "color": "3a2a1a", "mat": "flat", "z": 6, "outline": false})
+	return parts
+
+
+static func _front_beetle(pose: Dictionary) -> Array:
+	var o := Vector2(_p(pose, "x"), _p(pose, "y") + _p(pose, "bob") * 0.5)
+	var parts := []
+	var c := Vector2(48, 60) + o
+	for sd: int in [-1, 1]:
+		for i in 3:
+			var j := c + Vector2(sd * 8, -2 + i * 4)
+			var knee := j + Vector2(sd * (8 + i * 2), -4 + i * 2)
+			var foot := Vector2(j.x + sd * (14 + i * 4), 75 + o.y)
+			parts.append({"shapes": [["cap", j.x, j.y, knee.x, knee.y, 1.8, 1.5], ["cap", knee.x, knee.y, foot.x, foot.y, 1.4, 1.0]], "color": "3a2414", "mat": "shiny", "z": 0, "group": "perna%d%d" % [sd, i], "round": 1.5})
+	parts.append({"shapes": [["e", c.x, c.y - 4, 15, 12]], "color": "6a3a1e", "mat": "shiny", "z": 1, "group": "elitro", "round": 6.0,
+		"marks": [{"shapes": [["cap", c.x, c.y - 15, c.x, c.y + 6, 0.6, 0.6]], "color": "3a1c0e"}]})
+	parts.append({"shapes": [["e", c.x, c.y + 3, 10, 7]], "color": "5a3018", "mat": "shiny", "z": 2, "group": "pronoto", "round": 4.0})
+	var hc := c + Vector2(0, 8)
+	parts.append({"shapes": [["e", hc.x, hc.y, 5.5, 4.5]], "color": "4a2410", "mat": "shiny", "z": 3, "group": "cabeca", "round": 2.0})
+	# chifre grande subindo na frente do corpo, curvado para trás na ponta
+	parts.append({"shapes": [["bez", [hc.x, hc.y - 2, hc.x - 2, hc.y - 16, hc.x + 1, hc.y - 26, hc.x + 5, hc.y - 31], 3.4, 1.1]], "color": "5e3014", "mat": "shiny", "z": 4, "group": "chifre", "round": 2.0})
+	for sd: int in [-1, 1]:
+		parts.append({"shapes": [["c", hc.x + sd * 3, hc.y + 0.5, 1.0]], "color": "1a0e08", "mat": "flat", "z": 5, "outline": false})
+		parts.append({"shapes": [["c", hc.x + sd * 3 - 0.3, hc.y, 0.45]], "color": "ffffff", "mat": "flat", "z": 6, "outline": false})
+	return parts
+
+
+static func _front_butterfly(pose: Dictionary) -> Array:
+	var o := Vector2(_p(pose, "x"), _p(pose, "y") + _p(pose, "bob") * 2.0)
+	var flap := clampf(_p(pose, "wing") + (0.5 if _p(pose, "bob") < 0 else 0.0), 0.0, 1.5)
+	var parts := []
+	var c := Vector2(48, 44) + o
+	var sq := 1.0 - flap * 0.4
+	for sd: int in [-1, 1]:
+		var fw := c + Vector2(sd * 12 * sq, -8)
+		var hw := c + Vector2(sd * 9 * sq, 8)
+		var dots := [["c", fw.x + sd * 6 * sq, fw.y - 3, 1.2], ["c", fw.x + sd * 8 * sq, fw.y + 2, 1.0]]
+		parts.append({"shapes": [["e", fw.x, fw.y, 13 * sq, 10, sd * 25], ["e", hw.x, hw.y, 9 * sq, 8, sd * -20]], "color": "3a8cf4", "mat": "shiny", "z": 0, "group": "asa%d" % sd, "round": 5.0,
+			"marks": [{"shapes": [["e", fw.x, fw.y, 13 * sq, 10, sd * 25], ["-", ["e", fw.x - sd * 2 * sq, fw.y + 1.5, 10 * sq, 7.5, sd * 25]],
+				["e", hw.x, hw.y, 9 * sq, 8, sd * -20], ["-", ["e", hw.x - sd * 1.5 * sq, hw.y - 1, 6.5 * sq, 5.5, sd * -20]]], "color": "141822"},
+				{"shapes": dots, "color": "f4f4f4"}, {"shapes": [["c", c.x + sd * 3, c.y, 4]], "color": "1a3a8a"}]})
+	parts.append({"shapes": [["cap", c.x, c.y - 6, c.x, c.y + 12, 2.2, 1.4], ["c", c.x, c.y - 8, 2.6]], "color": "3a2a20", "mat": "fur", "z": 2, "group": "corpo", "round": 2.0})
+	for sd: int in [-1, 1]:
+		parts.append({"shapes": [["cap", c.x + sd, c.y - 10, c.x + sd * 6, c.y - 19, 0.5, 0.5], ["c", c.x + sd * 6, c.y - 19, 1.0]], "color": "2a1a14", "mat": "flat", "z": 3, "outline": false})
+		parts.append_array(_eye(c.x + sd * 1.6, c.y - 8.5, 0.9, "1a1a1a", false, false, 4))
+	return parts
+
+
+static func _front_spider(pose: Dictionary) -> Array:
+	var o := Vector2(_p(pose, "x"), _p(pose, "y") + _p(pose, "bob") * 0.5)
+	var jaw := _p(pose, "jaw")
+	var parts := []
+	var c := Vector2(48, 60) + o
+	parts.append({"shapes": [["e", c.x, c.y - 10, 15, 11]], "color": "4e3426", "mat": "fur", "z": 0, "group": "abdomen", "round": 6.0,
+		"marks": [{"shapes": [["e", c.x, c.y - 14, 7, 4]], "color": "6a4834"}]})
+	for sd: int in [-1, 1]:
+		for i in 4:
+			var j := c + Vector2(sd * 6, -2 + i * 2)
+			var knee := j + Vector2(sd * (9 + i * 3), -12 + i * 3)
+			var foot := Vector2(j.x + sd * (14 + i * 6), 75 + o.y)
+			parts.append({"shapes": [["cap", j.x, j.y, knee.x, knee.y, 2.8, 2.5], ["cap", knee.x, knee.y, foot.x, foot.y, 2.4, 1.4]], "color": "5e4230" if i < 2 else "4a3424", "mat": "fur", "z": 4 - i, "group": "pata%d%d" % [sd, i], "round": 1.8,
+				"marks": [{"shapes": [["c", knee.x, knee.y, 1.4]], "color": "a07a58"}]})
+	parts.append({"shapes": [["e", c.x, c.y, 10, 8]], "color": "5a3e2e", "mat": "fur", "z": 5, "group": "cefalo", "round": 5.0})
+	for i in 4:
+		var e := c + Vector2(-3 + (i % 2) * 6 + (1.5 if i >= 2 else 0.0) * (1 if i % 2 == 0 else -1), -4 + (i / 2) * 2.2)
+		parts.append({"shapes": [["c", e.x, e.y, 1.0 if i < 2 else 0.8]], "color": "1a0e0a", "mat": "flat", "z": 7, "outline": false})
+		parts.append({"shapes": [["c", e.x - 0.3, e.y - 0.3, 0.4]], "color": "f0e0d0", "mat": "flat", "z": 8, "outline": false})
+	for sd: int in [-1, 1]:
+		var ch := c + Vector2(sd * 2.8, 6)
+		parts.append({"shapes": [["e", ch.x, ch.y, 2.6, 3.2]], "color": "3a2620", "mat": "fur", "z": 9, "group": "quelicera%d" % sd, "round": 1.5})
+		var f0 := ch + Vector2(0, 2.5)
+		var f1 := f0 + Vector2(-sd * (1 + jaw * 2), 3)
+		parts.append({"shapes": [["cap", f0.x, f0.y, f1.x, f1.y, 0.9, 0.5]], "color": "1a1210", "mat": "shiny", "z": 10, "outline": false})
+	return parts
+
+
+static func _front_eel(pose: Dictionary) -> Array:
+	var o := Vector2(_p(pose, "x"), _p(pose, "y") + _p(pose, "bob"))
+	var jaw := _p(pose, "jaw")
+	var body := "4e4a3a"
+	var parts := []
+	parts.append({"shapes": [["e", 48, 74, 28, 4]], "color": "4a8ad0", "mat": "smooth", "z": 0, "group": "poca", "round": 2.0, "outline": false,
+		"marks": [{"shapes": [["e", 42, 73, 12, 1.4]], "color": "8ac4f0"}]})
+	parts.append({"shapes": [["bez", [48 + o.x, 52 + o.y, 62 + o.x, 66, 76 + o.x, 58, 84 + o.x, 68], 6.5, 2.0]], "color": body, "mat": "smooth", "z": 1, "group": "corpo", "round": 3.0,
+		"marks": [{"shapes": [["bez", [50 + o.x, 57 + o.y, 62 + o.x, 70, 76 + o.x, 62, 84 + o.x, 70], 2.6, 1.0]], "color": "e88a3a"}]})
+	var hc := Vector2(48, 48) + o
+	parts.append({"shapes": [["e", hc.x, hc.y, 10, 8]], "color": body, "mat": "smooth", "z": 3, "group": "cabeca", "round": 4.0,
+		"marks": [{"shapes": [["e", hc.x, hc.y + 5, 7, 3]], "color": "e88a3a"}]})
+	if jaw > 0.05:
+		parts.append({"shapes": [["e", hc.x, hc.y + 3, 5.5, 1 + 2.5 * jaw]], "color": "a83a40", "mat": "flat", "z": 5, "outline": false})
+	else:
+		parts.append({"shapes": [["cap", hc.x - 5, hc.y + 3, hc.x + 5, hc.y + 3, 0.5, 0.5]], "color": "2a2620", "mat": "flat", "z": 5, "outline": false})
+	for sd: int in [-1, 1]:
+		parts.append_array(_eye(hc.x + sd * 4.5, hc.y - 2.5, 1.0, "2a2a20", _closed(pose), false, 6))
+	if _p(pose, "glow") > 0.5:
+		parts.append_array(_sparks(hc + Vector2(0, 8), 20, 7, 20, 3))
 	return parts
 
 

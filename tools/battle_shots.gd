@@ -7,6 +7,7 @@ extends Node
 const CASES := [
 	["jiboia", "mico", "bote"],
 	["jiboia", "sapo", "constricao"],
+	["jiboia", "capivara", "constricao"],
 	["arara", "besouro", "rasante"],
 	["arara", "jiboia", "ventania"],
 	["mico", "arara", "arranhao"],
@@ -42,7 +43,10 @@ func _ready() -> void:
 	UI.setup_input()
 	UI.setup_theme()
 	seed(7)
+	var only: Array = args.slice(1)
 	for cs in CASES:
+		if not only.is_empty() and not cs[0] in only:
+			continue
 		await _case(cs[0], cs[1], cs[2])
 	print("\n%s (%d problemas)" % ["TUDO OK" if errors == 0 else "FALHOU", errors])
 	get_tree().quit(1 if errors else 0)

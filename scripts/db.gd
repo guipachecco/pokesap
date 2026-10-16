@@ -171,7 +171,7 @@ const MOVES := {
 	"bico_broca": {"name": "Bico Broca", "element": "ar", "contact": true, "anim": "dive", "power": 80, "acc": 95, "pp": 15, "desc": "Gira e perfura o alvo com o bico."},
 	"ventania": {"name": "Ventania", "element": "ar", "contact": false, "anim": "gust", "vfx": "vento", "power": 50, "acc": 100, "pp": 20, "desc": "Bate as asas e lança uma rajada cortante."},
 	"bote": {"name": "Bote", "element": "fisico", "contact": true, "anim": "strike", "power": 55, "acc": 100, "pp": 25, "desc": "Dá um bote repentino no alvo."},
-	"constricao": {"name": "Constrição", "element": "fisico", "contact": true, "anim": "strike", "power": 60, "acc": 95, "pp": 15, "status": {"id": "preso", "chance": 50}, "desc": "Enrola e aperta o alvo. Pode prendê-lo."},
+	"constricao": {"name": "Constrição", "element": "fisico", "contact": true, "anim": "constrict", "power": 60, "acc": 95, "pp": 15, "status": {"id": "preso", "chance": 50}, "desc": "Enrola o corpo em volta do alvo e aperta. Pode prendê-lo."},
 	"rolamento": {"name": "Rolamento Mortal", "element": "fisico", "contact": true, "anim": "bite", "power": 90, "acc": 85, "pp": 10, "desc": "Agarra e gira o alvo com força total."},
 	"lingua": {"name": "Língua Pegajosa", "element": "fisico", "contact": true, "anim": "tongue", "power": 40, "acc": 100, "pp": 30, "status": {"id": "lento", "chance": 20}, "desc": "Acerta o alvo com uma língua grudenta. Pode deixá-lo lento."},
 	"salto": {"name": "Salto Anfíbio", "element": "fisico", "contact": true, "anim": "slam", "power": 70, "acc": 95, "pp": 15, "desc": "Salta alto e cai sobre o alvo."},
@@ -211,12 +211,12 @@ const SPECIES := {
 		"dex": "Arara-azul-grande. O maior papagaio do mundo. Seu bico quebra cocos de palmeira com facilidade.",
 	},
 	"jacare": {
-		"num": 3, "name": "Jacaré", "class": "reptil", "affinities": ["fisico", "agua"], "base": [55, 58, 55, 38], "exp": 64, "catch": 45,
+		"num": 3, "name": "Jacaré", "class": "reptil", "size": "big", "affinities": ["fisico", "agua"], "base": [55, 58, 55, 38], "exp": 64, "catch": 45,
 		"learn": [[1, "investida"], [1, "olhar_feroz"], [5, "jato"], [9, "bote"], [14, "enrijecer"], [19, "rolamento"]],
 		"dex": "Jacaré-de-papo-amarelo. Vive em brejos e manguezais. Na época de reprodução, seu papo fica amarelo.",
 	},
 	"capivara": {
-		"num": 4, "name": "Capivara", "class": "mamifero", "affinities": ["fisico", "agua"], "base": [62, 45, 50, 35], "exp": 60, "catch": 190,
+		"num": 4, "name": "Capivara", "class": "mamifero", "size": "big", "affinities": ["fisico", "agua"], "base": [62, 45, 50, 35], "exp": 60, "catch": 190,
 		"learn": [[1, "investida"], [4, "enrijecer"], [8, "mordida"], [13, "mergulho"], [16, "banho_lama"]],
 		"dex": "O maior roedor do mundo. Calma e sociável, adora ficar na água e se dá bem com quase todo bicho.",
 	},

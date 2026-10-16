@@ -4,7 +4,8 @@ extends Node
 
 const POSES := [
 	{}, {"blink": 1, "bob": -1}, {"coil": 1, "claw": 1}, {"reach": 1, "jaw": 1}, {"reach": 1, "claw": -1, "sting": 1},
-	{"wing": 2, "coil": 0.8}, {"tongue": 1, "jaw": 1, "reach": 0.3}, {"y": -14, "leap": 1}, {"hurt": 1}, {"step": 1}, {"glow": 1, "spit": 1}, {"down": 1},
+	{"wing": 2, "coil": 0.8}, {"tongue": 1, "jaw": 1, "reach": 0.3}, {"hurt": 1}, {"down": 1},
+	{"view": "front"}, {"view": "front", "blink": 1}, {"view": "front", "jaw": 1}, {"reach": 1, "wrap": 1, "squeeze": 1},
 ]
 
 
